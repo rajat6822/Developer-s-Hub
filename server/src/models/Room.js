@@ -21,6 +21,10 @@ const roomSchema = new mongoose.Schema(
       type: [mongoose.Schema.Types.Mixed],
       default: [],
     },
+    closedAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,

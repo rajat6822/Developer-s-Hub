@@ -56,6 +56,10 @@ export function getFriendlyApiError(error, fallback) {
     return 'Room not found. Check the code and try again.'
   }
 
+  if (/room is closed/i.test(message)) {
+    return 'This room has been closed by the host.'
+  }
+
   if (/username/i.test(message)) {
     return 'Username is required.'
   }

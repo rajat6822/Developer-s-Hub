@@ -1,25 +1,59 @@
 # CodeRoom Client
 
-This is the React + Vite frontend for my part of CodeRoom. My work here is only the shared document editor and socket sync flow.
+React + Vite frontend for CodeRoom.
 
-## What I Built
+## Features
 
-- Built a plain `textarea` editor for shared code editing.
-- Added delta generation so the client sends only the changed text range instead of the full document.
-- Added Socket.io client wiring for:
-  - initial document sync
-  - sending local edits with `send-delta`
-  - receiving remote edits with `receive-delta`
-- Added local replay of accepted server deltas.
-- Added small tests for insertion, deletion, replacement, paste-sized inserts, and no-op edits.
+- Custom routes for `/`, `/create`, `/join`, `/room/:roomId`, and not found.
+- Room creation and join forms with friendly validation errors.
+- Shared code editor with delta-based Socket.IO synchronization.
+- Live participant panel from the `participant-list` socket event.
+- Typing indicator using throttled `typing` and `stopTyping` socket events.
+- Host-only close room control with confirmation modal.
+- Room closed state that disables editing and offers a return home action.
+- Offline, reconnecting, saving, and sync recovery states.
 
-## Main Files
+## Project Structure
 
-- `src/components/Editor.jsx` - editor UI and room display.
-- `src/hooks/useEditorSync.js` - socket lifecycle and editor state sync.
-- `src/utils/delta.js` - delta generation and local delta application.
-- `src/utils/socket.js` - Socket.io client setup.
-- `src/utils/delta.test.js` - unit tests for client delta logic.
+```text
+src/
+  App.jsx
+  App.css
+  components/
+    Editor.jsx
+    ExperienceShell.jsx
+    SceneBackground.jsx
+    ui/
+  hooks/
+    useEditorSync.js
+  pages/
+    HomePage.jsx
+    CreateRoomPage.jsx
+    JoinRoomPage.jsx
+    RoomPage.jsx
+    NotFoundPage.jsx
+  utils/
+    api.js
+    delta.js
+    session.js
+    socket.js
+```
+
+## Environment
+
+Copy `.env.example` to `.env` for local development:
+
+```env
+VITE_API_URL=http://localhost:5000
+VITE_SOCKET_URL=http://localhost:5000
+```
+
+For production, set both values to the deployed backend origin, for example:
+
+```env
+VITE_API_URL=https://your-backend.onrender.com
+VITE_SOCKET_URL=https://your-backend.onrender.com
+```
 
 ## Run Locally
 
@@ -28,21 +62,13 @@ npm install
 npm run dev
 ```
 
-The client runs on:
+Local URL:
 
 ```text
 http://localhost:5173
 ```
 
-To open a specific room document:
-
-```text
-http://localhost:5173?roomId=ROOM_CODE
-```
-
-If no room id is provided, the client uses `DEMO`.
-
-## Test and Build
+## Test, Lint, Build
 
 ```bash
 npm test
@@ -50,6 +76,21 @@ npm run lint
 npm run build
 ```
 
-## Not Part of My Work
+## Vercel Deployment
 
-I did not build authentication, room creation, participant lists, typing indicators, cursor sharing, syntax highlighting, code execution, or deployment.
+1. Import the `client` folder as the Vercel project root.
+2. Set framework preset to `Vite`.
+3. Set build command to `npm run build`.
+4. Set output directory to `dist`.
+5. Add environment variables:
+   - `VITE_API_URL`
+   - `VITE_SOCKET_URL`
+6. Add a rewrite so refresh works on client routes:
+
+```json
+{
+  "rewrites": [{ "source": "/(.*)", "destination": "/" }]
+}
+```
+
+7. Deploy, then test create room, join room, participant list, typing indicator, and close room on the live URL.

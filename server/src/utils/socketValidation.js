@@ -11,6 +11,17 @@ function isRoomMember(roomId, socketId) {
     );
 }
 
+function getRoomMember(roomId, socketId) {
+
+    if (!participants[roomId]) {
+        return null;
+    }
+
+    return participants[roomId].find(
+        (user) => user.socketId === socketId
+    ) || null;
+}
+
 function isValidDelta(delta) {
 
     if (!delta) return false;
@@ -25,6 +36,7 @@ function isValidDelta(delta) {
 }
 
 module.exports = {
+    getRoomMember,
     isRoomMember,
     isValidDelta,
 };

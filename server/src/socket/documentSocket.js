@@ -1,8 +1,10 @@
+const Room = require("../models/Room");
 const { applyAndPersistDelta, getRoomDocument } = require("../services/documentService");
+const participants = require("../store/participantStore");
 const reconnectStore = require("../store/reconnectStore");
 const typingTimers = require("../store/typingStore");
 const { addParticipant, removeParticipant, getParticipantList, } = require("../utils/participantHelper");
-const { isRoomMember, isValidDelta, } = require("../utils/socketValidation");
+const { getRoomMember, isRoomMember, isValidDelta, } = require("../utils/socketValidation");
 
 
 
@@ -19,6 +21,36 @@ function clearTypingTimer(roomId, username) {
   const key = `${roomId}-${username}`;
   clearTimeout(typingTimers[key]);
   delete typingTimers[key];
+}
+
+function isHostUser(room, username) {
+  return Boolean(room?.host?.username && username && room.host.username === username);
+}
+
+async function getRoomState(roomId) {
+  return Room.findOne({ roomCode: roomId }).select("roomCode host closedAt").lean();
+}
+
+async function isRoomClosed(roomId) {
+  const room = await Room.findOne({ roomCode: roomId }).select("closedAt").lean();
+  return Boolean(room?.closedAt);
+}
+
+function clearRoomMemory(roomId) {
+  delete participants[roomId];
+
+  Object.keys(reconnectStore).forEach((socketId) => {
+    if (reconnectStore[socketId]?.roomId === roomId) {
+      delete reconnectStore[socketId];
+    }
+  });
+
+  Object.keys(typingTimers).forEach((key) => {
+    if (key.startsWith(`${roomId}-`)) {
+      clearTimeout(typingTimers[key]);
+      delete typingTimers[key];
+    }
+  });
 }
 
 function removeSocketFromRoom(io, socket, roomId, username) {
@@ -60,11 +92,20 @@ function registerDocumentSocket(io) {
         }
 
         const roomDocument = await getRoomDocument(roomId);
+        const roomState = await getRoomState(roomId);
 
-        if (!roomDocument) {
+        if (!roomDocument || !roomState) {
           acknowledge?.({
             ok: false,
             reason: "Room not found.",
+          });
+          return;
+        }
+
+        if (roomState.closedAt) {
+          acknowledge?.({
+            ok: false,
+            reason: "Room is closed.",
           });
           return;
         }
@@ -93,6 +134,8 @@ function registerDocumentSocket(io) {
           roomId,
           document: roomDocument.document,
           documentVersion: roomDocument.documentVersion,
+          hostUsername: roomState.host?.username || null,
+          isHost: isHostUser(roomState, username),
         });
       } catch (error) {
         acknowledge?.({
@@ -116,6 +159,11 @@ function registerDocumentSocket(io) {
 
         if (!isRoomMember(roomId, socket.id)) {
           await acknowledgeWithSnapshot(roomId, "User is not inside this room.", acknowledge);
+          return;
+        }
+
+        if (await isRoomClosed(roomId)) {
+          await acknowledgeWithSnapshot(roomId, "Room is closed.", acknowledge);
           return;
         }
 
@@ -237,16 +285,108 @@ function registerDocumentSocket(io) {
 
     });
 
-    socket.on("close-room", ({ roomId }) => {
+    socket.on("close-room", async ({ roomId } = {}, acknowledge) => {
+      try {
+        if (!roomId) {
+          acknowledge?.({
+            ok: false,
+            reason: "roomId is required.",
+          });
+          return;
+        }
 
-      io.to(roomId).emit("room-closed");
+        const member = getRoomMember(roomId, socket.id);
 
+        if (!member) {
+          acknowledge?.({
+            ok: false,
+            reason: "User is not inside this room.",
+          });
+          return;
+        }
+
+        const room = await Room.findOne({ roomCode: roomId }).select("host closedAt");
+
+        if (!room) {
+          acknowledge?.({
+            ok: false,
+            reason: "Room not found.",
+          });
+          return;
+        }
+
+        if (!isHostUser(room, member.username)) {
+          acknowledge?.({
+            ok: false,
+            reason: "Only the room host can close this room.",
+          });
+          return;
+        }
+
+        if (!room.closedAt) {
+          room.closedAt = new Date();
+          await room.save();
+        }
+
+        io.to(roomId).emit("room-closed", {
+          roomId,
+          reason: "The host closed this room.",
+        });
+        io.to(roomId).emit("participant-list", []);
+        clearRoomMemory(roomId);
+        io.in(roomId).socketsLeave(roomId);
+
+        acknowledge?.({
+          ok: true,
+        });
+      } catch (error) {
+        acknowledge?.({
+          ok: false,
+          reason: "Unable to close room.",
+        });
+      }
     });
 
-    socket.on("kick-user", ({ roomId, socketId }) => {
+    socket.on("kick-user", async ({ roomId, socketId } = {}, acknowledge) => {
+      try {
+        if (!roomId || !socketId) {
+          acknowledge?.({
+            ok: false,
+            reason: "roomId and socketId are required.",
+          });
+          return;
+        }
 
-      io.to(socketId).emit("kicked");
+        const member = getRoomMember(roomId, socket.id);
+        const room = await getRoomState(roomId);
 
+        if (!member || !room) {
+          acknowledge?.({
+            ok: false,
+            reason: "User is not inside this room.",
+          });
+          return;
+        }
+
+        if (!isHostUser(room, member.username)) {
+          acknowledge?.({
+            ok: false,
+            reason: "Only the room host can remove participants.",
+          });
+          return;
+        }
+
+        io.to(socketId).emit("kicked");
+
+        acknowledge?.({
+          ok: true,
+        });
+      } catch (error) {
+        acknowledge?.({
+          ok: false,
+          reason: "Unable to remove participant.",
+        });
+      }
     });
   });
 }
