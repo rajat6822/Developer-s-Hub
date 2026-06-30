@@ -79,12 +79,19 @@ app.post("/join-room", async (req, res) => {
   }
 
   try {
-    const room = await Room.findOne({ roomCode }).select("roomCode");
+    const room = await Room.findOne({ roomCode }).select("roomCode closedAt");
 
     if (!room) {
       return res.status(404).json({
         ok: false,
         reason: "Room not found.",
+      });
+    }
+
+    if (room.closedAt) {
+      return res.status(403).json({
+        ok: false,
+        reason: "Room is closed.",
       });
     }
 

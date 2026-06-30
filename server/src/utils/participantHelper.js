@@ -51,13 +51,31 @@ function getParticipantList(roomId) {
         return [];
     }
 
-    return participants[roomId].map((user) => ({
-        username: user.username,
-    }));
+    const uniqueUsers = new Map();
+
+    participants[roomId].forEach((user) => {
+        if (!uniqueUsers.has(user.username)) {
+            uniqueUsers.set(user.username, {
+                username: user.username,
+            });
+        }
+    });
+
+    return [...uniqueUsers.values()];
+}
+
+function getParticipantBySocket(roomId, socketId) {
+
+    if (!participants[roomId]) {
+        return null;
+    }
+
+    return participants[roomId].find((user) => user.socketId === socketId) || null;
 }
 
 module.exports = {
     addParticipant,
+    getParticipantBySocket,
     removeParticipant,
     getParticipantList,
 };

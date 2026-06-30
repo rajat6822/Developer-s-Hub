@@ -8,6 +8,64 @@
 
 ---
 
+## Current Implementation Status
+
+CodeRoom now includes a working create/join flow, shared editor, delta-based Socket.IO synchronization, MongoDB document persistence, live participant list, typing indicator, and a host-only close room privilege.
+
+### Local Setup
+
+Server:
+
+```bash
+cd server
+npm install
+npm run dev
+```
+
+Client:
+
+```bash
+cd client
+npm install
+npm run dev
+```
+
+### Environment Variables
+
+Server uses:
+
+```env
+PORT=5000
+CLIENT_ORIGIN=http://localhost:5173
+MONGODB_URI=mongodb+srv://<username>:<password>@<cluster-host>/<database-name>?retryWrites=true&w=majority
+```
+
+Client uses:
+
+```env
+VITE_API_URL=http://localhost:5000
+VITE_SOCKET_URL=http://localhost:5000
+```
+
+### Routes
+
+- `/` home
+- `/create` create room
+- `/join` join room
+- `/room/:roomId` collaborative editor
+
+### Socket Events
+
+Client sends `join-document`, `send-delta`, `typing`, `stopTyping`, `leave-room`, and host-only `close-room`.
+
+Server sends `receive-delta`, `participant-list`, `typing`, `stopTyping`, `room-closed`, and `kicked`.
+
+### Deployment Notes
+
+Deploy the backend first and set `CLIENT_ORIGIN` to the deployed frontend URL. Deploy the frontend from the `client` folder on Vercel with `VITE_API_URL` and `VITE_SOCKET_URL` pointing at the deployed backend. The `client/vercel.json` rewrite keeps refresh working on `/room/:roomId`.
+
+---
+
 ## 0. Out of Scope
 
 Defining what you will **not** build is itself an engineering decision. Read this before anything else — it tells you where to stop spending time so you can spend it on what actually matters.

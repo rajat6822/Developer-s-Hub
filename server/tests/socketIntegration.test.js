@@ -12,7 +12,11 @@ const typingTimers = require('../src/store/typingStore')
 
 function createRoomStore(initialDocument = '') {
   const room = {
+    closedAt: null,
     document: initialDocument,
+    host: {
+      username: 'Alice',
+    },
     updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     async save() {
       this.updatedAt = new Date(this.updatedAt.getTime() + 1000)
@@ -29,7 +33,10 @@ function createRoomStore(initialDocument = '') {
         },
         lean() {
           return Promise.resolve({
+            closedAt: room.closedAt,
             document: room.document,
+            host: room.host,
+            roomCode: 'ROOM1',
             updatedAt: room.updatedAt,
           })
         },
@@ -264,6 +271,96 @@ test('socket integration removes participants on leave-room and rejects later ed
 
     assert.equal(rejectedEdit.ok, false)
     assert.equal(rejectedEdit.reason, 'User is not inside this room.')
+  } finally {
+    await server.cleanup()
+  }
+})
+
+test('socket integration broadcasts unique participant lists and typing presence', async () => {
+  const roomStore = createRoomStore('')
+  const server = await startSocketServer(roomStore)
+
+  try {
+    const alice = server.connectClient()
+    const bob = server.connectClient()
+    const secondBob = server.connectClient()
+    await Promise.all([once(alice, 'connect'), once(bob, 'connect'), once(secondBob, 'connect')])
+
+    await emitWithAck(alice, 'join-document', { roomId: 'ROOM1', username: 'Alice' })
+    const participantUpdate = once(alice, 'participant-list')
+    await emitWithAck(bob, 'join-document', { roomId: 'ROOM1', username: 'Bob' })
+    await emitWithAck(secondBob, 'join-document', { roomId: 'ROOM1', username: 'Bob' })
+
+    assert.deepEqual(await participantUpdate, [{ username: 'Alice' }, { username: 'Bob' }])
+
+    const typingUpdate = once(alice, 'typing')
+    bob.emit('typing', { roomId: 'ROOM1', username: 'Bob' })
+
+    assert.deepEqual(await typingUpdate, { username: 'Bob' })
+  } finally {
+    await server.cleanup()
+  }
+})
+
+test('socket integration rejects non-host close-room requests', async () => {
+  const roomStore = createRoomStore('')
+  const server = await startSocketServer(roomStore)
+
+  try {
+    const alice = server.connectClient()
+    const bob = server.connectClient()
+    await Promise.all([once(alice, 'connect'), once(bob, 'connect')])
+    await emitWithAck(alice, 'join-document', { roomId: 'ROOM1', username: 'Alice' })
+    await emitWithAck(bob, 'join-document', { roomId: 'ROOM1', username: 'Bob' })
+
+    const closeAck = await emitWithAck(bob, 'close-room', { roomId: 'ROOM1' })
+
+    assert.equal(closeAck.ok, false)
+    assert.equal(closeAck.reason, 'Only the room host can close this room.')
+    assert.equal(roomStore.room.closedAt, null)
+  } finally {
+    await server.cleanup()
+  }
+})
+
+test('socket integration lets the host close a room and blocks future edits and joins', async () => {
+  const roomStore = createRoomStore('open')
+  const server = await startSocketServer(roomStore)
+
+  try {
+    const alice = server.connectClient()
+    const bob = server.connectClient()
+    await Promise.all([once(alice, 'connect'), once(bob, 'connect')])
+    await emitWithAck(alice, 'join-document', { roomId: 'ROOM1', username: 'Alice' })
+    await emitWithAck(bob, 'join-document', { roomId: 'ROOM1', username: 'Bob' })
+
+    const closedForBob = once(bob, 'room-closed')
+    const closeAck = await emitWithAck(alice, 'close-room', { roomId: 'ROOM1' })
+
+    assert.equal(closeAck.ok, true)
+    assert.ok(roomStore.room.closedAt)
+    assert.deepEqual(await closedForBob, {
+      roomId: 'ROOM1',
+      reason: 'The host closed this room.',
+    })
+
+    const rejectedEdit = await emitWithAck(bob, 'send-delta', {
+      roomId: 'ROOM1',
+      position: 4,
+      insertedText: '!',
+      deletedLength: 0,
+      timestamp: 1,
+    })
+
+    assert.equal(rejectedEdit.ok, false)
+    assert.equal(rejectedEdit.reason, 'User is not inside this room.')
+
+    const charlie = server.connectClient()
+    await once(charlie, 'connect')
+    const rejoin = await emitWithAck(charlie, 'join-document', { roomId: 'ROOM1', username: 'Charlie' })
+
+    assert.equal(rejoin.ok, false)
+    assert.equal(rejoin.reason, 'Room is closed.')
   } finally {
     await server.cleanup()
   }
