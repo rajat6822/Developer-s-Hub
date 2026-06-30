@@ -1,40 +1,41 @@
-import { useState } from 'react'
-import Button from '../components/ui/Button'
-import Card from '../components/ui/Card'
-import ErrorMessage from '../components/ui/ErrorMessage'
-import Input from '../components/ui/Input'
-import PageContainer from '../components/ui/PageContainer'
-import { createRoom, getFriendlyApiError } from '../utils/api'
-import { saveRoomUsername } from '../utils/session'
+import { useState } from "react";
+import Button from "../components/ui/Button";
+import Card from "../components/ui/Card";
+import ErrorMessage from "../components/ui/ErrorMessage";
+import Input from "../components/ui/Input";
+import PageContainer from "../components/ui/PageContainer";
+import { createRoom, getFriendlyApiError } from "../utils/api";
+import { saveRoomUsername } from "../utils/session";
 
 export default function CreateRoomPage({ navigate }) {
-  const [username, setUsername] = useState('')
-  const [error, setError] = useState('')
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [username, setUsername] = useState("");
+  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleSubmit(event) {
-    event.preventDefault()
-    const trimmedUsername = username.trim()
+    event.preventDefault();
+    const trimmedUsername = username.trim();
 
     if (!trimmedUsername) {
-      setError('Username is required.')
-      return
+      setError("Username is required.");
+      return;
     }
 
-    setError('')
-    setIsSubmitting(true)
+    setError("");
+    setIsSubmitting(true);
 
     try {
-      const result = await createRoom(trimmedUsername)
-      saveRoomUsername(result.roomCode, trimmedUsername)
-      navigate(`/room/${encodeURIComponent(result.roomCode)}`)
+      const result = await createRoom(trimmedUsername);
+      saveRoomUsername(result.roomCode, trimmedUsername);
+      navigate(`/room/${encodeURIComponent(result.roomCode)}`);
     } catch (apiError) {
-      setError(getFriendlyApiError(apiError, 'Unable to create a room right now.'))
+      setError(
+        getFriendlyApiError(apiError, "Unable to create a room right now."),
+      );
     } finally {
-      setIsSubmitting(false)
+      setIsSubmitting(false);
     }
   }
-
   return (
     <PageContainer className="form-page" navigate={navigate}>
       <section className="auth-layout">
@@ -42,7 +43,8 @@ export default function CreateRoomPage({ navigate }) {
           <p className="eyebrow">Start a session</p>
           <h1>Create Room</h1>
           <p className="page-description">
-            Open a focused coding space and invite teammates into the same live document.
+            Open a focused coding space and invite teammates into the same live
+            document.
           </p>
           <div className="auth-note">
             <span />
@@ -54,20 +56,22 @@ export default function CreateRoomPage({ navigate }) {
           <form className="stacked-form" onSubmit={handleSubmit}>
             <Input
               autoComplete="name"
-              error={error === 'Username is required.' ? error : ''}
+              error={error === "Username is required." ? error : ""}
               id="create-username"
               label="Username"
               onChange={setUsername}
               placeholder="Alex"
               value={username}
             />
-            <ErrorMessage>{error !== 'Username is required.' ? error : ''}</ErrorMessage>
+            <ErrorMessage>
+              {error !== "Username is required." ? error : ""}
+            </ErrorMessage>
             <Button isLoading={isSubmitting} type="submit">
-              {isSubmitting ? 'Creating room' : 'Create Room'}
+              {isSubmitting ? "Creating room" : "Create Room"}
             </Button>
           </form>
         </Card>
       </section>
     </PageContainer>
-  )
+  );
 }
