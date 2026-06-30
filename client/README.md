@@ -1,16 +1,55 @@
-# React + Vite
+# CodeRoom Client
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This is the React + Vite frontend for my part of CodeRoom. My work here is only the shared document editor and socket sync flow.
 
-Currently, two official plugins are available:
+## What I Built
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Built a plain `textarea` editor for shared code editing.
+- Added delta generation so the client sends only the changed text range instead of the full document.
+- Added Socket.io client wiring for:
+  - initial document sync
+  - sending local edits with `send-delta`
+  - receiving remote edits with `receive-delta`
+- Added local replay of accepted server deltas.
+- Added small tests for insertion, deletion, replacement, paste-sized inserts, and no-op edits.
 
-## React Compiler
+## Main Files
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- `src/components/Editor.jsx` - editor UI and room display.
+- `src/hooks/useEditorSync.js` - socket lifecycle and editor state sync.
+- `src/utils/delta.js` - delta generation and local delta application.
+- `src/utils/socket.js` - Socket.io client setup.
+- `src/utils/delta.test.js` - unit tests for client delta logic.
 
-## Expanding the ESLint configuration
+## Run Locally
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+```bash
+npm install
+npm run dev
+```
+
+The client runs on:
+
+```text
+http://localhost:5173
+```
+
+To open a specific room document:
+
+```text
+http://localhost:5173?roomId=ROOM_CODE
+```
+
+If no room id is provided, the client uses `DEMO`.
+
+## Test and Build
+
+```bash
+npm test
+npm run lint
+npm run build
+```
+
+## Not Part of My Work
+
+I did not build authentication, room creation, participant lists, typing indicators, cursor sharing, syntax highlighting, code execution, or deployment.
