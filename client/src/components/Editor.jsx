@@ -1,5 +1,7 @@
-import { useMemo } from 'react'
 import { useEditorSync } from '../hooks/useEditorSync'
+import Button from './ui/Button'
+import ErrorMessage from './ui/ErrorMessage'
+import LoadingSpinner from './ui/LoadingSpinner'
 
 function formatVersion(documentVersion) {
   if (!documentVersion) {
@@ -13,21 +15,46 @@ function formatVersion(documentVersion) {
   })
 }
 
-export default function Editor() {
-  const roomId = useMemo(() => {
-    const params = new URLSearchParams(window.location.search)
-    return params.get('roomId') || params.get('room') || 'DEMO'
-  }, [])
+function getStatusLabel(status) {
+  if (status === 'connecting') return 'Connecting'
+  if (status === 'saving') return 'Saving'
+  if (status === 'synced') return 'Synced'
+  if (status === 'offline') return 'Server offline'
+  return status
+}
 
-  const { documentText, documentVersion, status, updateDocument } = useEditorSync(roomId)
+function getStatusError(status) {
+  if (status === 'Room not found.') {
+    return 'Room not found. Check the code or create a new room.'
+  }
+
+  if (status === 'offline') {
+    return 'Connection failed. Please confirm the server is online.'
+  }
+
+  if (status === 'sync-failed' || status === 'save-failed') {
+    return 'Unexpected sync error. Please refresh and try again.'
+  }
+
+  return ''
+}
+
+export default function Editor({ navigate, roomId, username }) {
+  const { documentText, documentVersion, status, updateDocument } = useEditorSync(roomId, username)
+  const isConnecting = status === 'connecting'
+  const statusError = getStatusError(status)
 
   return (
-    <main className="editor-shell">
+    <main className="editor-shell motion-in">
       <header className="editor-header">
         <div>
-          <p className="eyebrow">CodeRoom</p>
+          <p className="eyebrow">CodeRoom / Live Build</p>
           <h1>Shared Editor</h1>
+          <p className="editor-subtitle">Editing as {username}</p>
         </div>
+        <Button onClick={() => navigate('/join')} variant="ghost">
+          Leave
+        </Button>
         <dl className="sync-meta" aria-label="Document sync status">
           <div>
             <dt>Room</dt>
@@ -35,7 +62,7 @@ export default function Editor() {
           </div>
           <div>
             <dt>Status</dt>
-            <dd>{status}</dd>
+            <dd>{getStatusLabel(status)}</dd>
           </div>
           <div>
             <dt>Version</dt>
@@ -44,14 +71,38 @@ export default function Editor() {
         </dl>
       </header>
 
-      <textarea
-        className="shared-editor"
-        value={documentText}
-        onChange={(event) => updateDocument(event.target.value)}
-        spellCheck="false"
-        aria-label="Shared code editor"
-        placeholder="Start typing code..."
-      />
+      {isConnecting ? (
+        <div className="editor-loading">
+          <LoadingSpinner label="Connecting to room" />
+        </div>
+      ) : null}
+
+      <ErrorMessage>{statusError}</ErrorMessage>
+
+      <section className="editor-stage">
+        <aside className="editor-sidebar" aria-label="Room controls">
+          <p className="mn">Current room</p>
+          <strong>{roomId}</strong>
+          <span>{getStatusLabel(status)}</span>
+        </aside>
+        <div className="editor-window">
+          <div className="preview-toolbar editor-toolbar">
+            <span />
+            <span />
+            <span />
+            <p>{username}.js</p>
+          </div>
+          <textarea
+            className="shared-editor"
+            disabled={isConnecting}
+            value={documentText}
+            onChange={(event) => updateDocument(event.target.value)}
+            spellCheck="false"
+            aria-label="Shared code editor"
+            placeholder="Start typing code..."
+          />
+        </div>
+      </section>
     </main>
   )
 }
