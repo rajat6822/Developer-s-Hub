@@ -5,6 +5,7 @@ import HomePage from './pages/HomePage'
 import JoinRoomPage from './pages/JoinRoomPage'
 import NotFoundPage from './pages/NotFoundPage'
 import RoomPage from './pages/RoomPage'
+import ExperienceShell from './components/ExperienceShell'
 
 function parseRoute(pathname) {
   const cleanPath = pathname.replace(/\/+$/, '') || '/'
@@ -50,22 +51,42 @@ function App() {
   const route = useMemo(() => parseRoute(locationKey), [locationKey])
 
   if (route.name === 'create') {
-    return <CreateRoomPage navigate={navigate} />
+    return (
+      <ExperienceShell routeKey={locationKey}>
+        <CreateRoomPage navigate={navigate} />
+      </ExperienceShell>
+    )
   }
 
   if (route.name === 'join') {
-    return <JoinRoomPage navigate={navigate} />
+    return (
+      <ExperienceShell routeKey={locationKey}>
+        <JoinRoomPage navigate={navigate} />
+      </ExperienceShell>
+    )
   }
 
   if (route.name === 'room') {
-    return <RoomPage navigate={navigate} roomId={route.roomId} />
+    return (
+      <ExperienceShell routeKey={locationKey}>
+        <RoomPage navigate={navigate} roomId={route.roomId} />
+      </ExperienceShell>
+    )
   }
 
   if (route.name === 'not-found') {
-    return <NotFoundPage navigate={navigate} />
+    return (
+      <ExperienceShell routeKey={locationKey}>
+        <NotFoundPage navigate={navigate} />
+      </ExperienceShell>
+    )
   }
 
-  return <HomePage navigate={navigate} />
+  return (
+    <ExperienceShell routeKey={locationKey}>
+      <HomePage navigate={navigate} />
+    </ExperienceShell>
+  )
 }
 
 export default App

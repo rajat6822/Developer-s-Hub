@@ -4,10 +4,7 @@ export default function Navbar({ navigate }) {
   return (
     <header className="navbar">
       <button className="brand" onClick={() => navigate('/')} type="button">
-        <span className="brand-mark" aria-hidden="true">
-          CR
-        </span>
-        <span>CodeRoom</span>
+        <span className="brand-mark" aria-hidden="true">C ✦ R</span>
       </button>
       <nav aria-label="Primary navigation">
         <Button onClick={() => navigate('/join')} variant="ghost">

@@ -49,38 +49,46 @@ export default function JoinRoomPage({ navigate }) {
 
   return (
     <PageContainer className="form-page" navigate={navigate}>
-      <Card className="form-card">
-        <p className="eyebrow">Enter a room</p>
-        <h1>Join Room</h1>
-        <p className="page-description">
-          Paste the room code from your teammate and join with a recognizable name.
-        </p>
+      <section className="auth-layout">
+        <div className="auth-copy motion-in">
+          <p className="eyebrow">Enter a room</p>
+          <h1>Join Room</h1>
+          <p className="page-description">
+            Paste your teammate's room code and enter with a name the team can recognize.
+          </p>
+          <div className="auth-note">
+            <span />
+            <p>Room codes are case-insensitive and cleaned before joining.</p>
+          </div>
+        </div>
 
-        <form className="stacked-form" onSubmit={handleSubmit}>
-          <Input
-            autoComplete="name"
-            error={errors.username}
-            id="join-username"
-            label="Username"
-            onChange={setUsername}
-            placeholder="Sam"
-            value={username}
-          />
-          <Input
-            autoComplete="off"
-            error={errors.roomCode}
-            id="join-room-code"
-            label="Room Code"
-            onChange={(value) => setRoomCode(value.toUpperCase())}
-            placeholder="ROOM123"
-            value={roomCode}
-          />
-          <ErrorMessage>{formError}</ErrorMessage>
-          <Button isLoading={isSubmitting} type="submit">
-            {isSubmitting ? 'Joining room' : 'Join Room'}
-          </Button>
-        </form>
-      </Card>
+        <Card className="form-card motion-in">
+          <form className="stacked-form" onSubmit={handleSubmit}>
+            <Input
+              autoComplete="name"
+              error={errors.username}
+              id="join-username"
+              label="Username"
+              onChange={setUsername}
+              placeholder="Sam"
+              value={username}
+            />
+            <Input
+              autoComplete="off"
+              error={errors.roomCode}
+              id="join-room-code"
+              label="Room Code"
+              onChange={(value) => setRoomCode(value.toUpperCase())}
+              placeholder="ROOM123"
+              value={roomCode}
+            />
+            <ErrorMessage>{formError}</ErrorMessage>
+            <Button isLoading={isSubmitting} type="submit">
+              {isSubmitting ? 'Joining room' : 'Join Room'}
+            </Button>
+          </form>
+        </Card>
+      </section>
     </PageContainer>
   )
 }

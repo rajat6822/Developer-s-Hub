@@ -45,10 +45,10 @@ export default function Editor({ navigate, roomId, username }) {
   const statusError = getStatusError(status)
 
   return (
-    <main className="editor-shell">
+    <main className="editor-shell motion-in">
       <header className="editor-header">
         <div>
-          <p className="eyebrow">CodeRoom</p>
+          <p className="eyebrow">CodeRoom / Live Build</p>
           <h1>Shared Editor</h1>
           <p className="editor-subtitle">Editing as {username}</p>
         </div>
@@ -79,15 +79,30 @@ export default function Editor({ navigate, roomId, username }) {
 
       <ErrorMessage>{statusError}</ErrorMessage>
 
-      <textarea
-        className="shared-editor"
-        disabled={isConnecting}
-        value={documentText}
-        onChange={(event) => updateDocument(event.target.value)}
-        spellCheck="false"
-        aria-label="Shared code editor"
-        placeholder="Start typing code..."
-      />
+      <section className="editor-stage">
+        <aside className="editor-sidebar" aria-label="Room controls">
+          <p className="mn">Current room</p>
+          <strong>{roomId}</strong>
+          <span>{getStatusLabel(status)}</span>
+        </aside>
+        <div className="editor-window">
+          <div className="preview-toolbar editor-toolbar">
+            <span />
+            <span />
+            <span />
+            <p>{username}.js</p>
+          </div>
+          <textarea
+            className="shared-editor"
+            disabled={isConnecting}
+            value={documentText}
+            onChange={(event) => updateDocument(event.target.value)}
+            spellCheck="false"
+            aria-label="Shared code editor"
+            placeholder="Start typing code..."
+          />
+        </div>
+      </section>
     </main>
   )
 }

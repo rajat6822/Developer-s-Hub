@@ -28,7 +28,7 @@ export default function RoomPage({ navigate, roomId }) {
   if (!username) {
     return (
       <PageContainer className="form-page" navigate={navigate}>
-        <Card className="form-card">
+        <Card className="form-card motion-in">
           <p className="eyebrow">Almost there</p>
           <h1>Enter your name</h1>
           <p className="page-description">

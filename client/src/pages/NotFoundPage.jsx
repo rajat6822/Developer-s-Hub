@@ -5,7 +5,7 @@ import PageContainer from '../components/ui/PageContainer'
 export default function NotFoundPage({ navigate }) {
   return (
     <PageContainer className="form-page" navigate={navigate}>
-      <Card className="form-card not-found-card">
+      <Card className="form-card not-found-card motion-in">
         <p className="eyebrow">404</p>
         <h1>Room not found</h1>
         <p className="page-description">

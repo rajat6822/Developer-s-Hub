@@ -37,29 +37,37 @@ export default function CreateRoomPage({ navigate }) {
 
   return (
     <PageContainer className="form-page" navigate={navigate}>
-      <Card className="form-card">
-        <p className="eyebrow">Start a session</p>
-        <h1>Create Room</h1>
-        <p className="page-description">
-          Choose the name your teammates will see, then create a fresh collaborative room.
-        </p>
+      <section className="auth-layout">
+        <div className="auth-copy motion-in">
+          <p className="eyebrow">Start a session</p>
+          <h1>Create Room</h1>
+          <p className="page-description">
+            Open a focused coding space and invite teammates into the same live document.
+          </p>
+          <div className="auth-note">
+            <span />
+            <p>Your username becomes the room host identity.</p>
+          </div>
+        </div>
 
-        <form className="stacked-form" onSubmit={handleSubmit}>
-          <Input
-            autoComplete="name"
-            error={error === 'Username is required.' ? error : ''}
-            id="create-username"
-            label="Username"
-            onChange={setUsername}
-            placeholder="Alex"
-            value={username}
-          />
-          <ErrorMessage>{error !== 'Username is required.' ? error : ''}</ErrorMessage>
-          <Button isLoading={isSubmitting} type="submit">
-            {isSubmitting ? 'Creating room' : 'Create Room'}
-          </Button>
-        </form>
-      </Card>
+        <Card className="form-card motion-in">
+          <form className="stacked-form" onSubmit={handleSubmit}>
+            <Input
+              autoComplete="name"
+              error={error === 'Username is required.' ? error : ''}
+              id="create-username"
+              label="Username"
+              onChange={setUsername}
+              placeholder="Alex"
+              value={username}
+            />
+            <ErrorMessage>{error !== 'Username is required.' ? error : ''}</ErrorMessage>
+            <Button isLoading={isSubmitting} type="submit">
+              {isSubmitting ? 'Creating room' : 'Create Room'}
+            </Button>
+          </form>
+        </Card>
+      </section>
     </PageContainer>
   )
 }

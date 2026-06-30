@@ -8,7 +8,7 @@ export default function PageContainer({ children, className = '', navigate, show
       {showFooter ? (
         <footer className="footer">
           <span>CodeRoom</span>
-          <span>Collaborative code editing for focused teams.</span>
+          <span>Build / Review / Ship / Repeat</span>
         </footer>
       ) : null}
     </div>
