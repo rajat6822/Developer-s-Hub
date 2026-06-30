@@ -17,9 +17,14 @@ function formatVersion(documentVersion) {
 
 function getStatusLabel(status) {
   if (status === 'connecting') return 'Connecting'
+  if (status === 'reconnecting') return 'Reconnecting'
+  if (status === 'recovering') return 'Recovering'
+  if (status === 'sync-recovered') return 'Recovered'
   if (status === 'saving') return 'Saving'
   if (status === 'synced') return 'Synced'
   if (status === 'offline') return 'Server offline'
+  if (status === 'leaving') return 'Leaving'
+  if (status === 'reconnect-failed') return 'Reconnect failed'
   return status
 }
 
@@ -32,6 +37,14 @@ function getStatusError(status) {
     return 'Connection failed. Please confirm the server is online.'
   }
 
+  if (status === 'reconnect-failed') {
+    return 'Reconnect failed. Check your connection and refresh if needed.'
+  }
+
+  if (status === 'sync-recovered') {
+    return 'The editor recovered from a rejected change and synced the latest server document.'
+  }
+
   if (status === 'sync-failed' || status === 'save-failed') {
     return 'Unexpected sync error. Please refresh and try again.'
   }
@@ -40,9 +53,15 @@ function getStatusError(status) {
 }
 
 export default function Editor({ navigate, roomId, username }) {
-  const { documentText, documentVersion, status, updateDocument } = useEditorSync(roomId, username)
-  const isConnecting = status === 'connecting'
+  const { documentText, documentVersion, leaveRoom, status, updateDocument } = useEditorSync(roomId, username)
+  const isConnecting = status === 'connecting' || status === 'reconnecting' || status === 'recovering'
+  const isLeaving = status === 'leaving'
   const statusError = getStatusError(status)
+
+  async function handleLeave() {
+    await leaveRoom()
+    navigate('/join')
+  }
 
   return (
     <main className="editor-shell motion-in">
@@ -52,8 +71,8 @@ export default function Editor({ navigate, roomId, username }) {
           <h1>Shared Editor</h1>
           <p className="editor-subtitle">Editing as {username}</p>
         </div>
-        <Button onClick={() => navigate('/join')} variant="ghost">
-          Leave
+        <Button isLoading={isLeaving} onClick={handleLeave} variant="ghost">
+          {isLeaving ? 'Leaving' : 'Leave'}
         </Button>
         <dl className="sync-meta" aria-label="Document sync status">
           <div>

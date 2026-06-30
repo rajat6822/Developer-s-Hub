@@ -7,11 +7,47 @@ export function useEditorSync(roomId, username) {
   const [status, setStatus] = useState('connecting')
   const [documentVersion, setDocumentVersion] = useState(null)
   const documentRef = useRef('')
+  const joinRequestRef = useRef(0)
+  const joinInFlightRef = useRef(false)
+  const hasJoinedRef = useRef(false)
 
   const setDocumentSnapshot = useCallback((nextDocument) => {
     documentRef.current = nextDocument
     setDocumentText(nextDocument)
   }, [])
+
+  const joinRoom = useCallback(
+    (nextStatus = 'connecting') => {
+      if (!roomId || !username || joinInFlightRef.current) {
+        return
+      }
+
+      const requestId = joinRequestRef.current + 1
+      joinRequestRef.current = requestId
+      joinInFlightRef.current = true
+      setStatus(nextStatus)
+
+      socket.timeout(5000).emit('join-document', { roomId, username }, (error, response) => {
+        if (joinRequestRef.current !== requestId) {
+          return
+        }
+
+        joinInFlightRef.current = false
+
+        if (error || !response?.ok) {
+          hasJoinedRef.current = false
+          setStatus(response?.reason || (nextStatus === 'reconnecting' ? 'reconnect-failed' : 'sync-failed'))
+          return
+        }
+
+        hasJoinedRef.current = true
+        setDocumentSnapshot(response.document)
+        setDocumentVersion(response.documentVersion)
+        setStatus(nextStatus === 'recovering' ? 'sync-recovered' : 'synced')
+      })
+    },
+    [roomId, setDocumentSnapshot, username],
+  )
 
   useEffect(() => {
     function handleReceiveDelta(delta) {
@@ -19,29 +55,44 @@ export function useEditorSync(roomId, username) {
       setDocumentVersion(delta.updatedDocumentVersion)
     }
 
-    socket.connect()
-    socket.emit('join-document', { roomId, username }, (response) => {
-      if (!response?.ok) {
-        setStatus(response?.reason || 'sync-failed')
-        return
-      }
+    function handleConnect() {
+      joinRoom(hasJoinedRef.current ? 'reconnecting' : 'connecting')
+    }
 
-      setDocumentSnapshot(response.document)
-      setDocumentVersion(response.documentVersion)
-      setStatus('synced')
-    })
+    function handleDisconnect() {
+      if (hasJoinedRef.current) {
+        setStatus('offline')
+      }
+    }
+
+    function handleConnectError() {
+      setStatus(hasJoinedRef.current ? 'reconnect-failed' : 'offline')
+    }
 
     socket.on('receive-delta', handleReceiveDelta)
-    socket.on('connect_error', () => setStatus('offline'))
+    socket.on('connect', handleConnect)
+    socket.on('disconnect', handleDisconnect)
+    socket.on('connect_error', handleConnectError)
+
+    if (socket.connected) {
+      joinRoom('connecting')
+    } else {
+      socket.connect()
+    }
 
     return () => {
+      joinRequestRef.current += 1
+      joinInFlightRef.current = false
       socket.off('receive-delta', handleReceiveDelta)
-      socket.off('connect_error')
+      socket.off('connect', handleConnect)
+      socket.off('disconnect', handleDisconnect)
+      socket.off('connect_error', handleConnectError)
     }
-  }, [roomId, setDocumentSnapshot, username])
+  }, [joinRoom, setDocumentSnapshot])
 
   const updateDocument = useCallback(
     (nextDocument) => {
+      const previousDocument = documentRef.current
       const delta = generateDelta(documentRef.current, nextDocument)
       if (!delta) {
         return
@@ -52,7 +103,16 @@ export function useEditorSync(roomId, username) {
 
       socket.emit('send-delta', { roomId, ...delta }, (response) => {
         if (!response?.ok) {
-          setStatus(response?.reason || 'save-failed')
+          if (typeof response?.document === 'string') {
+            setDocumentSnapshot(response.document)
+            setDocumentVersion(response.documentVersion)
+            setStatus('sync-recovered')
+            return
+          }
+
+          setDocumentSnapshot(previousDocument)
+          setStatus('recovering')
+          joinRoom('recovering')
           return
         }
 
@@ -60,12 +120,38 @@ export function useEditorSync(roomId, username) {
         setStatus('synced')
       })
     },
-    [roomId, setDocumentSnapshot],
+    [joinRoom, roomId, setDocumentSnapshot],
+  )
+
+  const leaveRoom = useCallback(
+    () =>
+      new Promise((resolve) => {
+        setStatus('leaving')
+
+        function finish() {
+          joinRequestRef.current += 1
+          joinInFlightRef.current = false
+          hasJoinedRef.current = false
+          socket.disconnect()
+          resolve()
+        }
+
+        if (!socket.connected) {
+          finish()
+          return
+        }
+
+        socket.timeout(3000).emit('leave-room', { roomId }, () => {
+          finish()
+        })
+      }),
+    [roomId],
   )
 
   return {
     documentText,
     documentVersion,
+    leaveRoom,
     status,
     updateDocument,
   }
