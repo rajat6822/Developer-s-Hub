@@ -61,17 +61,42 @@ async function applyAndPersistDelta({ roomId, delta, socketId, roomModel = Room 
     return { ok: false, reason: 'Room not found.' }
   }
 
+  const currentDocument = currentRoom.document || ''
+  const currentDocumentVersion = currentRoom.updatedAt ? new Date(currentRoom.updatedAt).getTime() : Date.now()
   const deltaId = createDeltaFingerprint(socketId, delta)
   if (hasProcessedDelta(roomId, deltaId)) {
-    return { ok: false, reason: 'Duplicate delta ignored.' }
+    return {
+      ok: false,
+      reason: 'Duplicate delta ignored.',
+      document: currentDocument,
+      updatedDocumentVersion: currentDocumentVersion,
+    }
   }
 
-  const currentDocument = currentRoom.document || ''
-  const adjustedDelta = adjustDeltaPosition(delta, getRecentDeltas(roomId), currentDocument.length)
+  const recentDeltas = getRecentDeltas(roomId)
+  if (recentDeltas.length === 0) {
+    const initialValidation = validateDelta(delta, currentDocument.length)
+
+    if (!initialValidation.isValid) {
+      return {
+        ok: false,
+        reason: initialValidation.reason,
+        document: currentDocument,
+        updatedDocumentVersion: currentDocumentVersion,
+      }
+    }
+  }
+
+  const adjustedDelta = adjustDeltaPosition(delta, recentDeltas, currentDocument.length)
   const validation = validateDelta(adjustedDelta, currentDocument.length)
 
   if (!validation.isValid) {
-    return { ok: false, reason: validation.reason }
+    return {
+      ok: false,
+      reason: validation.reason,
+      document: currentDocument,
+      updatedDocumentVersion: currentDocumentVersion,
+    }
   }
 
   const nextDocument = applyDelta(currentDocument, adjustedDelta)

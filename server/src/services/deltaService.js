@@ -9,6 +9,14 @@ function getDeltaLengthChange(delta) {
   return normalizeInsertedText(delta.insertedText).length - delta.deletedLength
 }
 
+function clampNumber(value, min, max) {
+  return Math.min(Math.max(value, min), max)
+}
+
+function rangesOverlap(firstStart, firstEnd, secondStart, secondEnd) {
+  return firstStart < secondEnd && secondStart < firstEnd
+}
+
 // Keep socket payload validation boring and strict. Bad edits are rejected, not thrown.
 function validateDelta(delta, documentLength) {
   if (!delta || typeof delta !== 'object') {
@@ -52,10 +60,13 @@ function applyDelta(document, delta) {
   return `${before}${insertedText}${after}`
 }
 
-// Simple conflict rule: accept edits in server arrival order and shift late indexes.
-// This is deliberately smaller than OT/CRDT; overlapping edits can still surprise users.
+// Conflict rule: accept edits in server arrival order, shift stale positions, and
+// clamp overlapping deletes to the current server document instead of failing.
 function adjustDeltaPosition(delta, appliedDeltas, documentLength) {
-  const adjustedDelta = { ...delta }
+  const adjustedDelta = {
+    ...delta,
+    insertedText: normalizeInsertedText(delta.insertedText),
+  }
   const comparableTimestamp = Number(delta.timestamp) || 0
 
   const positionShift = appliedDeltas.reduce((shift, appliedDelta) => {
@@ -70,7 +81,29 @@ function adjustDeltaPosition(delta, appliedDeltas, documentLength) {
     return shift + getDeltaLengthChange(appliedDelta)
   }, 0)
 
-  adjustedDelta.position = Math.max(0, adjustedDelta.position + positionShift)
+  adjustedDelta.position = clampNumber(adjustedDelta.position + positionShift, 0, documentLength)
+
+  const requestedDeleteEnd = adjustedDelta.position + adjustedDelta.deletedLength
+  adjustedDelta.deletedLength = clampNumber(adjustedDelta.deletedLength, 0, documentLength - adjustedDelta.position)
+
+  for (const appliedDelta of appliedDeltas) {
+    if ((Number(appliedDelta.timestamp) || 0) <= comparableTimestamp) {
+      continue
+    }
+
+    const appliedStart = clampNumber(appliedDelta.position, 0, documentLength)
+    const appliedEnd = clampNumber(appliedDelta.position + appliedDelta.deletedLength, appliedStart, documentLength)
+
+    if (
+      adjustedDelta.deletedLength > 0 &&
+      rangesOverlap(adjustedDelta.position, requestedDeleteEnd, appliedStart, appliedEnd)
+    ) {
+      const overlapStart = Math.max(adjustedDelta.position, appliedStart)
+      const overlapEnd = Math.min(requestedDeleteEnd, appliedEnd)
+      adjustedDelta.deletedLength = Math.max(0, adjustedDelta.deletedLength - (overlapEnd - overlapStart))
+    }
+  }
+
   return adjustedDelta
 }
 

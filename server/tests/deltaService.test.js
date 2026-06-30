@@ -42,3 +42,24 @@ test('adjustDeltaPosition shifts late edits after prior deletions', () => {
 
   assert.equal(adjusted.position, 2)
 })
+
+test('adjustDeltaPosition clamps stale positions to the current document', () => {
+  const adjusted = adjustDeltaPosition(
+    { position: 20, insertedText: '!', deletedLength: 0, timestamp: 100 },
+    [{ position: 1, insertedText: '', deletedLength: 10, timestamp: 200 }],
+    3,
+  )
+
+  assert.equal(adjusted.position, 3)
+})
+
+test('adjustDeltaPosition shrinks overlapping deletes predictably', () => {
+  const adjusted = adjustDeltaPosition(
+    { position: 2, insertedText: '', deletedLength: 4, timestamp: 100 },
+    [{ position: 3, insertedText: '', deletedLength: 2, timestamp: 200 }],
+    6,
+  )
+
+  assert.equal(adjusted.position, 2)
+  assert.equal(adjusted.deletedLength, 2)
+})

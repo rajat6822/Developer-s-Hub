@@ -38,6 +38,17 @@ MONGODB_URI=your_mongodb_atlas_connection_string
 
 `MONGODB_URI` must point to MongoDB Atlas or another MongoDB instance before real document persistence will work.
 
+For deployment, add these same values in your hosting provider's environment variable settings. The local `server/.env` file is ignored by Git and will not be uploaded automatically.
+
+Common production values:
+
+```env
+CLIENT_ORIGIN=https://your-frontend-domain.example
+MONGODB_URI=mongodb+srv://<username>:<password>@<cluster-host>/<database-name>?retryWrites=true&w=majority
+```
+
+If MongoDB Atlas still connects locally but not after deployment, open Atlas Network Access and allow the deployment provider's outbound IP. For free-tier hosts with changing outbound IPs, use `0.0.0.0/0` for the hack-sprint demo, then tighten it later.
+
 ## Run Locally
 
 ```bash
