@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { applyDelta, generateDelta } from '../utils/delta'
 import { socket } from '../utils/socket'
 
-export function useEditorSync(roomId) {
+export function useEditorSync(roomId, username) {
   const [documentText, setDocumentText] = useState('')
   const [status, setStatus] = useState('connecting')
   const [documentVersion, setDocumentVersion] = useState(null)
@@ -20,7 +20,7 @@ export function useEditorSync(roomId) {
     }
 
     socket.connect()
-    socket.emit('join-document', { roomId }, (response) => {
+    socket.emit('join-document', { roomId, username }, (response) => {
       if (!response?.ok) {
         setStatus(response?.reason || 'sync-failed')
         return
@@ -38,7 +38,7 @@ export function useEditorSync(roomId) {
       socket.off('receive-delta', handleReceiveDelta)
       socket.off('connect_error')
     }
-  }, [roomId, setDocumentSnapshot])
+  }, [roomId, setDocumentSnapshot, username])
 
   const updateDocument = useCallback(
     (nextDocument) => {
