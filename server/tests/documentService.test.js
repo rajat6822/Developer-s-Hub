@@ -66,3 +66,53 @@ test('applyAndPersistDelta rejects invalid deltas without changing persisted tex
   assert.equal(result.ok, false)
   assert.equal(roomModel.room.document, 'Hi')
 })
+
+test('applyAndPersistDelta transforms only edits after the client base version', async () => {
+  clearDocumentServiceMemory()
+  const roomModel = createRoomModel('ab')
+  const initialVersion = roomModel.room.updatedAt.getTime()
+
+  const first = await applyAndPersistDelta({
+    roomId: 'ROOM4',
+    socketId: 'socket-1',
+    roomModel,
+    delta: {
+      position: 0,
+      insertedText: 'X',
+      deletedLength: 0,
+      baseDocumentVersion: initialVersion,
+      timestamp: 1,
+    },
+  })
+
+  const stale = await applyAndPersistDelta({
+    roomId: 'ROOM4',
+    socketId: 'socket-2',
+    roomModel,
+    delta: {
+      position: 2,
+      insertedText: 'Y',
+      deletedLength: 0,
+      baseDocumentVersion: initialVersion,
+      timestamp: 2,
+    },
+  })
+
+  const current = await applyAndPersistDelta({
+    roomId: 'ROOM4',
+    socketId: 'socket-3',
+    roomModel,
+    delta: {
+      position: 1,
+      insertedText: 'Z',
+      deletedLength: 0,
+      baseDocumentVersion: stale.updatedDocumentVersion,
+      timestamp: 3,
+    },
+  })
+
+  assert.equal(first.ok, true)
+  assert.equal(stale.ok, true)
+  assert.equal(current.ok, true)
+  assert.equal(roomModel.room.document, 'XZabY')
+})

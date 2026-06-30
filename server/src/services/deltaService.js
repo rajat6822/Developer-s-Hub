@@ -60,20 +60,15 @@ function applyDelta(document, delta) {
   return `${before}${insertedText}${after}`
 }
 
-// Conflict rule: accept edits in server arrival order, shift stale positions, and
-// clamp overlapping deletes to the current server document instead of failing.
+// Conflict rule: accept edits in server arrival order and transform stale edits
+// against the accepted edits that happened after the client's base version.
 function adjustDeltaPosition(delta, appliedDeltas, documentLength) {
   const adjustedDelta = {
     ...delta,
     insertedText: normalizeInsertedText(delta.insertedText),
   }
-  const comparableTimestamp = Number(delta.timestamp) || 0
 
   const positionShift = appliedDeltas.reduce((shift, appliedDelta) => {
-    if ((Number(appliedDelta.timestamp) || 0) <= comparableTimestamp) {
-      return shift
-    }
-
     if (appliedDelta.position > adjustedDelta.position) {
       return shift
     }
@@ -87,10 +82,6 @@ function adjustDeltaPosition(delta, appliedDeltas, documentLength) {
   adjustedDelta.deletedLength = clampNumber(adjustedDelta.deletedLength, 0, documentLength - adjustedDelta.position)
 
   for (const appliedDelta of appliedDeltas) {
-    if ((Number(appliedDelta.timestamp) || 0) <= comparableTimestamp) {
-      continue
-    }
-
     const appliedStart = clampNumber(appliedDelta.position, 0, documentLength)
     const appliedEnd = clampNumber(appliedDelta.position + appliedDelta.deletedLength, appliedStart, documentLength)
 

@@ -11,6 +11,10 @@ export function useEditorSync(roomId, username) {
   const [hostUsername, setHostUsername] = useState(null)
   const [isHost, setIsHost] = useState(false)
   const documentRef = useRef('')
+  const confirmedDocumentRef = useRef('')
+  const documentVersionRef = useRef(null)
+  const pendingDeltaRef = useRef(null)
+  const queuedDocumentRef = useRef(null)
   const joinRequestRef = useRef(0)
   const joinInFlightRef = useRef(false)
   const hasJoinedRef = useRef(false)
@@ -21,6 +25,16 @@ export function useEditorSync(roomId, username) {
     documentRef.current = nextDocument
     setDocumentText(nextDocument)
   }, [])
+
+  const setConfirmedSnapshot = useCallback(
+    (nextDocument, nextVersion) => {
+      confirmedDocumentRef.current = nextDocument
+      documentVersionRef.current = nextVersion
+      setDocumentSnapshot(nextDocument)
+      setDocumentVersion(nextVersion)
+    },
+    [setDocumentSnapshot],
+  )
 
   const joinRoom = useCallback(
     (nextStatus = 'connecting') => {
@@ -47,20 +61,36 @@ export function useEditorSync(roomId, username) {
         }
 
         hasJoinedRef.current = true
-        setDocumentSnapshot(response.document)
-        setDocumentVersion(response.documentVersion)
+        pendingDeltaRef.current = null
+        queuedDocumentRef.current = null
+        setConfirmedSnapshot(response.document, response.documentVersion)
         setHostUsername(response.hostUsername || null)
         setIsHost(Boolean(response.isHost))
         setStatus(nextStatus === 'recovering' ? 'sync-recovered' : 'synced')
       })
     },
-    [roomId, setDocumentSnapshot, username],
+    [roomId, setConfirmedSnapshot, username],
   )
 
   useEffect(() => {
     function handleReceiveDelta(delta) {
-      setDocumentSnapshot(applyDelta(documentRef.current, delta))
+      const nextConfirmedDocument = applyDelta(confirmedDocumentRef.current, delta)
+      confirmedDocumentRef.current = nextConfirmedDocument
+      documentVersionRef.current = delta.updatedDocumentVersion
       setDocumentVersion(delta.updatedDocumentVersion)
+
+      if (pendingDeltaRef.current) {
+        const nextDocument = applyDelta(documentRef.current, delta)
+        setDocumentSnapshot(nextDocument)
+
+        if (queuedDocumentRef.current !== null) {
+          queuedDocumentRef.current = applyDelta(queuedDocumentRef.current, delta)
+        }
+
+        return
+      }
+
+      setDocumentSnapshot(nextConfirmedDocument)
     }
 
     function handleParticipantList(nextParticipants = []) {
@@ -160,7 +190,7 @@ export function useEditorSync(roomId, username) {
       socket.off('disconnect', handleDisconnect)
       socket.off('connect_error', handleConnectError)
     }
-  }, [joinRoom, setDocumentSnapshot, username])
+  }, [joinRoom, setConfirmedSnapshot, setDocumentSnapshot, username])
 
   const emitTyping = useCallback(() => {
     if (!socket.connected || status === 'room-closed' || status === 'kicked') {
@@ -186,36 +216,70 @@ export function useEditorSync(roomId, username) {
         return
       }
 
-      const previousDocument = documentRef.current
-      const delta = generateDelta(documentRef.current, nextDocument)
-      if (!delta) {
+      emitTyping()
+      setDocumentSnapshot(nextDocument)
+
+      if (pendingDeltaRef.current) {
+        queuedDocumentRef.current = nextDocument
         return
       }
 
-      emitTyping()
-      setDocumentSnapshot(nextDocument)
-      setStatus('saving')
+      const sendDocument = (documentToSend) => {
+        const baseDocument = confirmedDocumentRef.current
+        const baseDocumentVersion = documentVersionRef.current
+        const delta = generateDelta(baseDocument, documentToSend)
 
-      socket.emit('send-delta', { roomId, ...delta }, (response) => {
-        if (!response?.ok) {
-          if (typeof response?.document === 'string') {
-            setDocumentSnapshot(response.document)
-            setDocumentVersion(response.documentVersion)
-            setStatus('sync-recovered')
-            return
-          }
-
-          setDocumentSnapshot(previousDocument)
-          setStatus('recovering')
-          joinRoom('recovering')
+        if (!delta) {
+          queuedDocumentRef.current = null
+          setStatus('synced')
           return
         }
 
-        setDocumentVersion(response.updatedDocumentVersion)
-        setStatus('synced')
-      })
+        pendingDeltaRef.current = delta
+        setStatus('saving')
+
+        socket.emit('send-delta', { roomId, baseDocumentVersion, ...delta }, (response) => {
+          pendingDeltaRef.current = null
+
+          if (!response?.ok) {
+            queuedDocumentRef.current = null
+
+            if (typeof response?.document === 'string') {
+              setConfirmedSnapshot(response.document, response.documentVersion)
+              setStatus('sync-recovered')
+              return
+            }
+
+            setStatus('recovering')
+            joinRoom('recovering')
+            return
+          }
+
+          if (typeof response.document === 'string') {
+            confirmedDocumentRef.current = response.document
+          } else {
+            confirmedDocumentRef.current = documentToSend
+          }
+
+          documentVersionRef.current = response.updatedDocumentVersion
+          setDocumentVersion(response.updatedDocumentVersion)
+
+          const queuedDocument = queuedDocumentRef.current
+          queuedDocumentRef.current = null
+
+          if (queuedDocument !== null && queuedDocument !== confirmedDocumentRef.current) {
+            sendDocument(queuedDocument)
+            return
+          }
+
+          setDocumentSnapshot(confirmedDocumentRef.current)
+          setStatus('synced')
+        })
+      }
+
+      sendDocument(nextDocument)
     },
-    [emitTyping, joinRoom, roomId, setDocumentSnapshot, status],
+    [emitTyping, joinRoom, roomId, setConfirmedSnapshot, setDocumentSnapshot, status],
   )
 
   const leaveRoom = useCallback(
