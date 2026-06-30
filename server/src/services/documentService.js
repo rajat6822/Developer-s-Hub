@@ -25,6 +25,7 @@ function createDeltaFingerprint(socketId, delta) {
         position: delta.position,
         insertedText: delta.insertedText,
         deletedLength: delta.deletedLength,
+        baseDocumentVersion: delta.baseDocumentVersion,
         timestamp: delta.timestamp,
       }),
     )
@@ -38,6 +39,14 @@ function hasProcessedDelta(roomId, deltaId) {
 function rememberProcessedDelta(roomId, deltaId) {
   const deltaIds = [...(processedDeltaIdsByRoom.get(roomId) || []), deltaId].slice(-MAX_PROCESSED_IDS)
   processedDeltaIdsByRoom.set(roomId, deltaIds)
+}
+
+function getDeltasAfterVersion(roomId, baseDocumentVersion) {
+  if (!Number.isFinite(baseDocumentVersion)) {
+    return getRecentDeltas(roomId)
+  }
+
+  return getRecentDeltas(roomId).filter((delta) => delta.previousDocumentVersion >= baseDocumentVersion)
 }
 
 async function getRoomDocument(roomId, roomModel = Room) {
@@ -73,8 +82,9 @@ async function applyAndPersistDelta({ roomId, delta, socketId, roomModel = Room 
     }
   }
 
-  const recentDeltas = getRecentDeltas(roomId)
-  if (recentDeltas.length === 0) {
+  const baseDocumentVersion = Number(delta.baseDocumentVersion)
+  const deltasAfterBase = getDeltasAfterVersion(roomId, baseDocumentVersion)
+  if (deltasAfterBase.length === 0) {
     const initialValidation = validateDelta(delta, currentDocument.length)
 
     if (!initialValidation.isValid) {
@@ -87,7 +97,7 @@ async function applyAndPersistDelta({ roomId, delta, socketId, roomModel = Room 
     }
   }
 
-  const adjustedDelta = adjustDeltaPosition(delta, recentDeltas, currentDocument.length)
+  const adjustedDelta = adjustDeltaPosition(delta, deltasAfterBase, currentDocument.length)
   const validation = validateDelta(adjustedDelta, currentDocument.length)
 
   if (!validation.isValid) {
@@ -108,6 +118,7 @@ async function applyAndPersistDelta({ roomId, delta, socketId, roomModel = Room 
     position: adjustedDelta.position,
     insertedText: adjustedDelta.insertedText,
     deletedLength: adjustedDelta.deletedLength,
+    previousDocumentVersion: currentDocumentVersion,
     timestamp: Number(delta.timestamp) || Date.now(),
     updatedDocumentVersion,
   }

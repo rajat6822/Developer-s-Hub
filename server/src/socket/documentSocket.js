@@ -13,6 +13,7 @@ function buildIncomingDelta(payload) {
     position: payload.position,
     insertedText: payload.insertedText,
     deletedLength: payload.deletedLength,
+    baseDocumentVersion: payload.baseDocumentVersion,
     timestamp: payload.timestamp || Date.now(),
   };
 }
@@ -201,6 +202,7 @@ function registerDocumentSocket(io) {
 
         acknowledge?.({
           ok: true,
+          document: result.document,
           updatedDocumentVersion: result.updatedDocumentVersion,
         });
       } catch (error) {
