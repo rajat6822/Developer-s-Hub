@@ -2,361 +2,399 @@
 
 Audit date: 2026-06-30
 
-Scope: Complete repository inspection of `Developer-s-Hub`, including React client, Express/Socket.IO server, MongoDB model, socket events, services, tests, README/SRS documentation, package files, environment configuration, and git metadata.
+Scope: Full repository inspection of `Developer-s-Hub`, including React client, Express/Socket.IO server, MongoDB model, services, stores, utilities, tests, documentation, package files, environment usage, routing, and visible git history.
 
 ## Project Overview
 
-CodeRoom is intended to be a real-time collaborative code editor with room creation/join, delta-based editing, MongoDB persistence, live participant/presence features, host privileges, and deployment.
+CodeRoom is intended to be a real-time collaborative code editor where users create or join rooms, edit a shared single document through delta-based synchronization, persist the document in MongoDB, see live participants/presence, and demonstrate at least one host privilege.
 
-The repository currently implements a narrow document-sync slice: a React textarea editor, client-side delta generation, server-side delta validation/application, MongoDB document persistence for existing rooms, initial document sync for existing rooms, participant list broadcasting on the server, and typing event forwarding on the server.
+The repository is now more complete than the previous audit report indicated. It has client-side routes for home/create/join/room, HTTP APIs for creating and validating rooms, username capture, socket-based initial sync, delta generation/transmission/application, MongoDB persistence for room documents, server-side participant list broadcasts, server-side typing events, and membership checks before accepting deltas.
 
-The project is not end-to-end functional as submitted. The client emits `join-document` with only `roomId` in `client/src/hooks/useEditorSync.js:23`, while the server requires both `roomId` and `username` in `server/src/socket/documentSocket.js:17-25`. As a result, the visible frontend cannot successfully join the backend sync flow.
+The project is still not hackathon-ready. The largest gaps are host privileges that are not actually authorized or exposed in the UI, participant and typing presence events that are not integrated on the frontend, missing reconnect/resync behavior, no deployment evidence, and limited conflict handling.
 
 ## Repository Structure
 
 ```text
 Developer-s-Hub/
-  README.md                         # SRS / assignment requirements
-  PROJECT_AUDIT_REPORT.md           # This audit report
+  README.md
+  FRONTEND_IMPLEMENTATION_REPORT.md
+  PROJECT_AUDIT_REPORT.md
   client/
     package.json
     vite.config.js
     src/
       App.jsx
+      main.jsx
       App.css
       index.css
-      main.jsx
-      components/Editor.jsx
-      hooks/useEditorSync.js
-      utils/delta.js
-      utils/delta.test.js
-      utils/socket.js
       assets/
-    public/
+      components/
+        Editor.jsx
+        ExperienceShell.jsx
+        SceneBackground.jsx
+        ui/
+      hooks/
+        useEditorSync.js
+      pages/
+        HomePage.jsx
+        CreateRoomPage.jsx
+        JoinRoomPage.jsx
+        RoomPage.jsx
+        NotFoundPage.jsx
+      utils/
+        api.js
+        delta.js
+        delta.test.js
+        session.js
+        socket.js
   server/
     package.json
     server.js
+    README.md
     src/
       app.js
       models/Room.js
-      services/deltaService.js
-      services/documentService.js
-      socket/documentSocket.js
-      store/participantStore.js
+      services/
+        deltaService.js
+        documentService.js
+      socket/
+        documentSocket.js
+      store/
+        participantStore.js
+        reconnectStore.js
+        typingStore.js
+      utils/
+        participantHelper.js
+        socketValidation.js
     tests/
       deltaService.test.js
       documentService.test.js
 ```
 
-Observed generated/ignored directories: `client/node_modules`, `server/node_modules`, and `client/dist`.
+Generated directories such as `client/dist`, `client/node_modules`, and `server/node_modules` were present/available during verification but are not core source architecture.
 
 ## Feature Checklist
 
-| Feature                    | Status   | Evidence                                                                                                                                                                                |
-| -------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Create Room                | Missing  | No API route, socket event, client page, or service creates `Room` documents.                                                                                                           |
-| Join Room                  | Partial  | Server has `join-document` for existing rooms in `documentSocket.js:17`, but the client omits required `username` at `useEditorSync.js:23`, so the shipped UI cannot join successfully. |
-| Room Validation            | Partial  | Server rejects missing `roomId`/`username` and non-existent rooms in `documentSocket.js:20-37`; no create/join form validation exists on the client.                                    |
-| Username Handling          | Partial  | Server requires/stores socket-level username in memory at `documentSocket.js:17-55`; client has no username input or payload.                                                           |
-| Host Privileges            | Missing  | `Room.host` exists in `models/Room.js:16-19`, but no host creation, authorization, or privileged action exists.                                                                         |
-| Live Collaborative Editing | Partial  | Delta send/receive exists, but broken initial join prevents the current client from entering sync. No integration/socket tests verify multi-client editing.                             |
-| Delta Generation           | Complete | Client `generateDelta` creates minimal contiguous edits in `client/src/utils/delta.js:2-36`; unit tests cover insert/delete/replace/paste/no-op.                                        |
-| Delta Transmission         | Partial  | Client emits `send-delta` in `useEditorSync.js:53`; server receives it in `documentSocket.js:74`. No joined-room authorization is checked.                                              |
-| Delta Application          | Complete | Server applies deltas in `deltaService.js:46-53`; client replays received deltas in `client/src/utils/delta.js:39-44`.                                                                  |
-| Conflict Resolution        | Partial  | Server has simple position shifting in `deltaService.js:57-75`, backed by tests. It is documented as limited and does not fully handle overlapping concurrent edits.                    |
-| MongoDB Persistence        | Partial  | Existing room documents are read/updated through `documentService.js:43-96`; room creation is absent and persistence fails without `MONGODB_URI`.                                       |
-| Socket Connection          | Partial  | Socket.IO server is registered in `server.js:11-18`; client socket exists in `utils/socket.js:3-8`. Join payload mismatch blocks normal use.                                            |
-| Socket Reconnection        | Missing  | Socket.IO client has default reconnection, but the hook does not re-emit `join-document` on reconnect; server deletes participants on disconnect.                                       |
-| Initial Document Sync      | Partial  | Server returns document/version on successful join in `documentSocket.js:66-71`; client applies it in `useEditorSync.js:29-31`, but current join fails without username.                |
-| Participant List           | Partial  | Server broadcasts `participant-list` at `documentSocket.js:58-64` and `153-159`; client never listens to or renders it.                                                                 |
-| Presence Indicator         | Partial  | Server forwards `typing`/`stopTyping` at `documentSocket.js:115-131`; client never emits, listens to, or renders presence.                                                              |
-| Typing Indicator           | Partial  | Server-side events exist only; no frontend integration.                                                                                                                                 |
-| Deployment Configuration   | Missing  | No deployment manifests, production URLs, Procfile, render/railway/vercel/netlify config, or deployed link found.                                                                       |
-| Environment Variables      | Partial  | Server uses `PORT`, `CLIENT_ORIGIN`, `MONGODB_URI`; client uses `VITE_SOCKET_URL`. No example env file; local `.env` is ignored and not suitable as deployment evidence.                |
+| Feature | Status | Evidence |
+| --- | --- | --- |
+| Create Room | Complete | Client form calls `createRoom` in `client/src/pages/CreateRoomPage.jsx`; API posts to `/create-room` in `client/src/utils/api.js:32-33`; server creates a `Room` in `server/src/app.js:31-55`. |
+| Join Room | Complete | Client join form posts room code and username through `client/src/utils/api.js:43-44`; server validates room existence in `server/src/app.js:63-95`; room route connects via socket in `client/src/hooks/useEditorSync.js:23`. |
+| Room Validation | Partial | HTTP join validates missing username/code and not-found rooms; socket join validates missing roomId/username and not-found rooms. No shared validation module, expiry, format enforcement, rate limit, or duplicate name policy. |
+| Username Handling | Partial | Username is captured, saved in `sessionStorage`, and sent to socket join. It is not persisted as a real session identity, deduplicated, authenticated, or used for host authorization. |
+| Host Privileges | Partial | `Room.host` is set on creation in `server/src/app.js:48`, and socket events `close-room`/`kick-user` exist in `server/src/socket/documentSocket.js:190-198`; there is no host check and no frontend UI that emits/listens to these flows. |
+| Live Collaborative Editing | Partial | Text deltas are emitted and broadcast; normal editing can work after room creation. No browser/socket integration tests verify multiple clients, and client reconciliation is optimistic/limited. |
+| Delta Generation | Complete | `client/src/utils/delta.js` generates smallest contiguous text edits and has unit coverage in `client/src/utils/delta.test.js`. |
+| Delta Transmission | Complete | Client emits `send-delta` in `client/src/hooks/useEditorSync.js:53`; server receives and broadcasts accepted deltas in `server/src/socket/documentSocket.js:66-123`. |
+| Delta Application | Complete | Server applies deltas in `server/src/services/deltaService.js`; client applies received deltas in `client/src/utils/delta.js`. |
+| Conflict Resolution | Partial | Server applies arrival-order edits and shifts late positions in `server/src/services/deltaService.js`; comments acknowledge overlapping edits can still surprise users. |
+| MongoDB Persistence | Partial | `Room` documents are created and document text is saved after accepted deltas. Persistence depends on configured `MONGODB_URI`; participant presence/session state remains in memory. |
+| Socket Connection | Complete | Socket.IO server is configured in `server/server.js`; client connects with `socket.io-client` in `client/src/utils/socket.js`. |
+| Socket Reconnection | Missing | Socket.IO may reconnect at transport level, but the app does not re-emit `join-document`, re-register participants, or fetch a fresh document after reconnect. |
+| Initial Document Sync | Complete | Server returns document/version on `join-document`; client applies that snapshot in `client/src/hooks/useEditorSync.js:23-32`. |
+| Participant List | Partial | Server emits `participant-list` on join/disconnect in `server/src/socket/documentSocket.js:54` and `182`; frontend never subscribes to or renders it. |
+| Presence Indicator | Partial | Server implements typing/stopTyping events, but frontend never emits, listens, or displays them. |
+| Typing Indicator | Partial | Server-side timer-based typing events exist; no client integration. |
+| Deployment Configuration | Missing | No deployed URL, Render/Railway/Vercel/Netlify config, Procfile, or production deployment instructions were found. |
+| Environment Variables | Partial | Server uses `PORT`, `CLIENT_ORIGIN`, `MONGODB_URI`; client uses `VITE_API_URL` and `VITE_SOCKET_URL`. No root/client/server `.env.example` was found. |
 
 ## Frontend Analysis
 
-The React architecture is very small and readable: `App.jsx` renders one `Editor`, `Editor.jsx` owns presentation, `useEditorSync.js` owns socket/editor state, and `utils/delta.js` owns pure delta utilities.
+The frontend is a custom-router React app. `client/src/App.jsx:10-29` parses `/`, `/create`, `/join`, `/room/:roomId`, and unknown routes. Create and join pages validate basic required inputs, call the API wrapper, store the username in `sessionStorage`, and navigate to the room route.
 
-Implemented frontend pieces:
+Implemented frontend features:
 
-- Single shared textarea editor in `client/src/components/Editor.jsx:45-55`.
-- Room id parsed from `?roomId=` or `?room=` with fallback `DEMO` in `Editor.jsx:17-20`.
-- Socket lifecycle and local optimistic update flow in `useEditorSync.js`.
-- Client-side delta generation and replay in `utils/delta.js`.
-- Basic document status/version display in `Editor.jsx:28-44`.
-- Unit tests for delta generation in `client/src/utils/delta.test.js`.
+- Home, create-room, join-room, room, and not-found screens.
+- Username capture and direct room route fallback when a user opens `/room/:roomId` without prior session data.
+- API wrapper with friendly error mapping and `VITE_API_URL` support.
+- Socket editor hook with initial document sync, local delta generation, optimistic local updates, remote delta replay, and status labels.
+- Reusable UI primitives for buttons, cards, inputs, errors, modal, navbar, loading spinner, and page layout.
+- Visual/interactive shell files (`ExperienceShell.jsx`, `SceneBackground.jsx`) and responsive CSS.
 
-Missing or incomplete frontend pieces:
+Frontend issues:
 
-- No create-room page or form.
-- No join-room page or form.
-- No username input, despite the server requiring one.
-- No participant list UI.
-- No typing/presence UI.
-- No host controls.
-- No routing library or route-level state; the app is one screen only.
-- No user-facing recovery for rejected deltas beyond setting `status` text.
-- No reconnect handling that rejoins the room and refreshes state after disconnect.
+1. Participant list is not displayed, even though the server broadcasts it.
+2. Typing/presence indicators are not emitted or displayed.
+3. Host controls are absent from the UI.
+4. `Leave` only navigates to `/join`; it does not emit a leave event or disconnect the socket.
+5. Reconnect handling is incomplete; the hook sets `offline` on `connect_error` but does not rejoin/resync on `connect` after a drop.
+6. Optimistic local edits are not rolled back or refreshed if `send-delta` is rejected.
+7. Documentation drift: `client/README.md` still says room creation and participant indicators were not built, but source code now contains some of those workflows.
+8. Production build emits a large chunk warning: `dist/assets/index-*.js` is about 862 kB before gzip, likely due to animation/3D dependencies.
 
-Frontend bugs and risks:
+Missing pages/components:
 
-- Critical: `socket.emit('join-document', { roomId }, ...)` omits `username`, but the server rejects joins without it.
-- Local optimistic updates are not rolled back or reconciled when `send-delta` is rejected.
-- Remote deltas are applied directly to the current local snapshot; concurrent local edits can produce cursor jumps or divergent client state.
-- `socket.off('connect_error')` removes all listeners for that event, which is acceptable in this tiny app but risky if more hooks/components are added.
-- `socket.connect()` is called in the hook, but cleanup never disconnects or leaves the room.
+- No participant panel/list component.
+- No host controls component.
+- No typing indicator/presence component.
+- No reconnect/offline recovery view beyond status/error text.
 
-Unused/dead assets:
+Unused or likely-unused source/assets:
 
-- `client/src/assets/react.svg`, `client/src/assets/vite.svg`, and `client/src/assets/hero.png` are not imported by the current app.
-- `client/public/icons.svg` and `favicon.svg` are standard/static assets; only favicon is referenced by the built HTML.
+- `client/src/assets/react.svg`, `client/src/assets/vite.svg`, and `client/src/assets/hero.png` were not observed as imported by current source.
+- `Modal.jsx` exists but no usage was found in the current routed screens.
 
 ## Backend Analysis
 
-The backend has Express, Socket.IO, Mongoose, document services, and unit tests. It does not have room-management routes/controllers, middleware beyond JSON/CORS, or HTTP APIs besides health.
+The backend uses Express 5, Socket.IO, and Mongoose. `server/server.js` wires HTTP, Socket.IO CORS, MongoDB connection, and socket registration.
 
-Implemented backend pieces:
+Implemented backend features:
 
-- HTTP server and Socket.IO setup in `server/server.js`.
-- MongoDB connection when `MONGODB_URI` is present in `server.js:20-26`.
-- Health endpoint in `server/src/app.js:9-11`.
-- Room schema with `roomCode`, `document`, `host`, and `participants` in `server/src/models/Room.js`.
-- Delta validation/application in `server/src/services/deltaService.js`.
-- Document persistence/update flow in `server/src/services/documentService.js`.
-- Socket events for join, delta send, typing, stopTyping, and disconnect cleanup in `server/src/socket/documentSocket.js`.
+- `GET /health`.
+- `POST /create-room` with generated uppercase room code and initial host/participant fields.
+- `POST /join-room` with username and room-code validation.
+- `Room` model with unique indexed `roomCode`, document text, host, participants, and timestamps.
+- Socket join flow with initial document sync.
+- Socket delta flow with membership check, delta validation, persistence, and room broadcast.
+- Server-side participant store, participant-list broadcast, typing timers, stopTyping, disconnect cleanup.
+- Socket events for `close-room` and `kick-user`.
 
-Missing or incomplete backend pieces:
+Backend issues:
 
-- No room creation endpoint/event.
-- No explicit join-room endpoint separate from document sync.
-- No controller or route organization for room management.
-- No API validation layer beyond inline socket checks.
-- No host authorization or privileged mutation path.
-- No persisted participant/session model.
-- No deployment hardening.
-
-Backend bugs and risks:
-
-- Async socket handlers have no `try/catch`; database failures can cause unhandled promise rejections.
-- `send-delta` only checks `roomId`, not whether the socket has joined that room or is an authorized participant.
-- CORS is unrestricted for Express via `app.use(cors())`, while Socket.IO uses `CLIENT_ORIGIN`; this is inconsistent.
-- `Room.host` and `Room.participants` use `Mixed`, reducing validation and query safety.
-- `nodemon` is listed under production `dependencies`, not `devDependencies`.
+1. Async socket handlers are not wrapped in `try/catch`; database failures during join or delta persistence may cause unhandled errors instead of clean acknowledgements.
+2. Express CORS is unrestricted through `app.use(cors())`, while Socket.IO CORS is restricted by `CLIENT_ORIGIN`; policies are inconsistent.
+3. `close-room` and `kick-user` have no host authorization, no room membership validation, and no frontend integration.
+4. `close-room` does not persist a closed state or prevent future joins.
+5. `kick-user` accepts any `socketId` payload from any connected socket and emits `kicked`; this is a security risk if exposed.
+6. `Room.host` and `Room.participants` are `Mixed`, so MongoDB shape validation is weak.
+7. HTTP `join-room` does not add participants to MongoDB, so persisted participants are not representative of active or historical room membership.
+8. `nodemon` is in production `dependencies` instead of `devDependencies`.
 
 ## Socket Analysis
 
 Socket events found:
 
-| Direction        | Event                   | Status                                                     |
-| ---------------- | ----------------------- | ---------------------------------------------------------- |
-| Client -> Server | `join-document`         | Implemented server/client, but payload mismatch breaks it. |
-| Client -> Server | `send-delta`            | Implemented.                                               |
-| Server -> Client | `receive-delta`         | Implemented.                                               |
-| Server -> Client | `participant-list`      | Server emits; client missing listener/UI.                  |
-| Client -> Server | `typing`                | Server listens; client missing emitter.                    |
-| Client -> Server | `stopTyping`            | Server listens; client missing emitter.                    |
-| Server -> Client | `typing` / `stopTyping` | Server emits; client missing listener/UI.                  |
-| Server internal  | `disconnect`            | Removes socket from in-memory participant store.           |
+| Direction | Event | Status |
+| --- | --- | --- |
+| Client -> Server | `join-document` | Implemented and now includes `roomId` plus `username`. |
+| Client -> Server | `send-delta` | Implemented with membership and basic delta validation. |
+| Server -> Client | `receive-delta` | Implemented and consumed by frontend. |
+| Server -> Client | `participant-list` | Server emits; frontend missing listener/UI. |
+| Client -> Server | `typing` | Server listens; frontend missing emitter. |
+| Client -> Server | `stopTyping` | Server listens; frontend missing emitter. |
+| Server -> Client | `typing` / `stopTyping` | Server emits; frontend missing listener/UI. |
+| Client -> Server | `close-room` | Server listens; no auth, persistence, or frontend integration. |
+| Client -> Server | `kick-user` | Server listens; no auth or frontend integration. |
+| Server -> Client | `room-closed` / `kicked` | Server emits; frontend missing listener/UI. |
+| Server internal | `disconnect` | Removes socket from in-memory stores and rebroadcasts participants. |
 
-Room isolation is partial. Broadcasts use `socket.to(roomId)` or `io.to(roomId)`, which isolates outgoing socket messages by room. However, `send-delta` accepts any `roomId` payload and does not verify that the socket has joined the room.
+Room isolation is mostly correct for edit broadcasts because sockets join room-specific channels and `send-delta` checks membership through `isRoomMember`. Presence and host-control events are weaker because typing does not validate membership and host-control events do not validate host identity.
 
-Reconnect handling is missing. Socket.IO may reconnect transport-level connections by default, but the application does not rejoin the room, re-register the participant, or fetch a fresh document after a disconnect.
+Reconnect handling is the main realtime gap. The `reconnectStore` name is misleading: it is keyed by socket id, deleted on disconnect, and does not restore application state across a new socket connection.
 
 ## Database Analysis
 
-The only model is `Room`.
+Collections/models found:
+
+- `Room` only.
 
 Schema fields:
 
 - `roomCode`: required, unique, indexed, trimmed string.
-- `document`: string with default `''`.
+- `document`: string, defaults to empty.
 - `host`: `Mixed`, default `null`.
 - `participants`: array of `Mixed`, default `[]`.
 - timestamps enabled.
 
 Persistence status:
 
-- Document persistence for existing rooms is implemented by reading `Room.document`, applying a delta, assigning the new string, and saving.
-- Room creation is missing, so the app has no normal path to create persisted rooms.
-- Participant state used by sockets is stored in process memory, not MongoDB.
-- No schema-level validation exists for host or participant shape.
-- No TTL/expiry strategy is present.
+- Room records are created by `/create-room`.
+- Document content is persisted after each accepted delta.
+- Initial document sync reads the persisted document.
+- Host and initial participant are persisted at room creation only.
+- Active participants, reconnect state, typing timers, recent deltas, and duplicate-delta fingerprints are all process memory.
+
+Database risks:
+
+- No explicit host/participant sub-schemas.
+- No room closed/expired/locked state.
+- No indexes beyond room code.
+- No integration test using a real or in-memory MongoDB instance.
+- Unable to verify MongoDB persistence across a real server restart from repository alone.
 
 ## Code Quality
 
 Strengths:
 
-- Delta logic is separated into pure utilities on both client and server.
-- Server document persistence is separated from socket event wiring.
-- Unit tests cover core delta behavior and document-service happy/error paths.
-- The codebase is small and easy to navigate.
-- Client lint passes.
+- Delta generation/application is separated into focused utility/service modules.
+- API access is centralized in `client/src/utils/api.js`.
+- Socket state is isolated in `useEditorSync`.
+- Backend persistence is separated from socket wiring through `documentService`.
+- Existing tests cover core delta behavior and document service behavior.
+- Client lint, client tests, server tests, and production build all pass.
 
 Weaknesses:
 
-- End-to-end contracts are not enforced or tested; the username mismatch is the clearest example.
-- Room-management architecture is absent, despite the schema having room-related fields.
-- Error handling is minimal in socket handlers.
-- Security/authz boundaries are not defined.
-- The frontend has only one page and no domain workflows.
-- Documentation is inconsistent: `server/README.md` says participant lists and typing indicators were not built, but server-side code now contains those events.
+- Architecture is still thin around identity, host authorization, and sessions.
+- Socket handlers mix room membership, presence, document sync, and host-control concerns in one file.
+- Documentation is stale in `client/README.md`, `server/README.md`, and the older frontend report.
+- Error handling differs across HTTP and socket paths.
+- Validation is duplicated and inconsistent between `socketValidation.js` and `deltaService.js`.
+- No end-to-end or integration tests cover HTTP create/join plus multi-client socket editing.
 
 ## Bugs Found
 
-1. Critical: client cannot join backend sync because `username` is missing from the join payload.
-2. Critical: no room creation path exists, so `join-document` only works for manually seeded MongoDB rooms.
-3. High: any connected socket can emit `send-delta` for any existing room code without first joining it.
-4. High: reconnect does not rejoin the Socket.IO room or resync the document.
-5. High: failed `send-delta` acknowledgements leave the local optimistic document modified.
-6. Medium: async socket database errors are not caught and acknowledged.
-7. Medium: participant list and typing events are server-only and invisible in the UI.
-8. Medium: in-memory participant store does not scale across multiple server instances and resets on restart.
-9. Medium: duplicate delta fingerprint uses timestamp and payload; it may not be stable enough for retry semantics across reconnects.
-10. Low: README files describe only partial ownership slices and do not document an integrated product or deployed link.
+1. High: host-control socket events are unauthenticated and can be emitted by non-host clients.
+2. High: reconnect does not rejoin the room or resync the document after transport recovery.
+3. High: optimistic local edits are not reconciled after a rejected delta acknowledgement.
+4. High: async socket database errors are not caught and acknowledged.
+5. Medium: participant list and typing indicators exist only server-side and are invisible to users.
+6. Medium: `typing` and `stopTyping` events do not verify room membership before broadcasting.
+7. Medium: `close-room` does not actually close the room for future joins.
+8. Medium: active participant state is memory-only and not suitable for multi-instance deployment.
+9. Medium: stale README files misrepresent implemented and missing work.
+10. Low: build output warns about a large JavaScript chunk.
 
 ## Missing Features
 
-- Create room workflow.
-- Join room workflow with username.
-- Host privilege workflow.
-- Client participant list.
-- Client typing/presence indicator.
+- Frontend participant list.
+- Frontend typing/presence indicator.
+- Real host privileges with server-side authorization and UI.
 - Reconnect/session restoration.
-- Deployment configuration and live links.
-- Room APIs/controllers/services.
+- Explicit leave-room behavior.
+- Deployment configuration and public live links.
+- `.env.example` files.
 - Socket integration tests.
-- MongoDB integration tests.
-- Production CORS/environment documentation.
-- User-facing invalid-room handling in the visible UI.
+- HTTP API tests for create/join.
+- MongoDB restart persistence verification.
+- Stronger conflict handling for overlapping edits.
+- Room closed/locked/expired state.
 
 ## Risks
 
-- Hackathon bar risk: the submitted app likely fails a live demo because the first join request is rejected.
-- Data integrity risk: concurrent edits are only lightly adjusted and can still surprise users for overlapping edits.
-- Security risk: room codes alone authorize writes, and even that is not enforced against socket membership.
-- Scalability risk: in-memory participant state prevents multi-instance deployment.
-- Persistence risk: no normal room-creation path means persistence is not demonstrable from the UI.
-- Delivery risk: no deployed URL/config is present, and deployment is mandatory in the SRS.
+- Hackathon bar risk: host privileges, participant list UI, presence UI, reconnect, and deployment are required or strongly expected but incomplete.
+- Security risk: host-control socket events are not authorized.
+- Data consistency risk: simple position shifting is explainable but not robust under overlapping concurrent edits.
+- Scalability risk: participants, reconnect data, typing timers, recent deltas, and duplicate fingerprints are process-local memory.
+- Delivery risk: no deployed URLs or deployment manifests are present.
+- Demo risk: without frontend participant/presence UI, server-side realtime work cannot be shown convincingly in the product.
 
 ## Recommendations
 
 Critical:
 
-- Add a real create-room path that creates a `Room` document with unique `roomCode`.
-- Add a join screen that collects room code and username.
-- Fix the `join-document` client/server contract.
-- Gate `send-delta` by socket room membership or participant session.
+- Add real host authorization and expose one safe host privilege in the UI.
+- Render `participant-list` and typing/presence events in the room UI.
+- Implement reconnect handling that rejoins the room and refreshes the latest document snapshot.
+- Add deployment instructions/config and verify a public frontend/backend deployment.
 
 High:
 
-- Implement host privileges and enforce them server-side.
-- Rejoin and resync on reconnect.
-- Render participant list and typing indicator in the client.
-- Add socket integration tests for create/join/edit/disconnect flows.
-- Add try/catch and acknowledgement errors around async socket operations.
+- Wrap async socket handlers in `try/catch` and return acknowledgement errors.
+- Add socket integration tests for join, edit, broadcast, disconnect, and unauthorized deltas.
+- Add HTTP tests for `/create-room` and `/join-room`.
+- Add explicit leave-room behavior.
+- Validate typing and host-control events against membership/host identity.
 
 Medium:
 
 - Replace `Mixed` host/participant fields with explicit sub-schemas.
 - Add `.env.example` files for client and server.
-- Align README documentation with actual integrated behavior.
-- Add deployment instructions and production CORS settings.
+- Align README files with actual implementation.
+- Consider simple room states such as open/closed.
+- Add build code-splitting or remove unused heavy dependencies if they are not part of the demo.
 
 Low:
 
 - Remove unused starter assets.
 - Move `nodemon` to `devDependencies`.
-- Add minimal UI polish around invalid-room and save-failed states.
+- Add clearer user-facing sync failure recovery copy.
 
 ## Progress %
 
-| Area       | Estimated Completion |
-| ---------- | -------------------: |
-| Overall    |                  35% |
-| Frontend   |                  30% |
-| Backend    |                  45% |
-| Realtime   |                  45% |
-| Database   |                  35% |
-| Testing    |                  35% |
-| Deployment |                   5% |
+| Area | Estimated Completion |
+| --- | ---: |
+| Overall | 62% |
+| Frontend | 65% |
+| Backend | 70% |
+| Realtime | 60% |
+| Database | 60% |
+| Testing | 35% |
+| Deployment | 10% |
 
-Rationale: the delta/document slice is meaningfully implemented and tested, but core product flows required by the SRS are missing or disconnected.
+Rationale: the core create/join/edit/persist path is substantially implemented, but several required hackathon-bar features are missing from the actual user experience, and deployment cannot be verified.
 
 ## Priority TODO
 
 Critical:
 
-- Fix client `join-document` payload by collecting/sending username.
-- Implement room creation.
-- Implement a real join-room UI.
-- Add membership validation before accepting `send-delta`.
+- Implement and enforce host privilege correctly.
+- Display live participant list in `RoomPage`/`Editor`.
+- Display and emit typing/presence indicator.
+- Add reconnect rejoin/resync behavior.
+- Produce and document a working public deployment.
 
 High:
 
-- Implement host privilege behavior.
-- Add reconnect rejoin/resync behavior.
-- Display participant list.
-- Display typing/presence.
-- Add socket integration tests.
+- Add `try/catch` around async socket handlers.
+- Add integration tests for multi-client socket sync.
+- Add API tests for room creation and joining.
+- Implement leave-room cleanup.
+- Update stale README documentation.
 
 Medium:
 
-- Add explicit Room sub-schemas and validation.
-- Add environment examples.
-- Add deployment configuration and public URLs.
-- Add server-side error handling around all async socket handlers.
+- Strengthen `Room` schema types.
+- Add `.env.example` files.
+- Add room closed/locked state if using close-room as host privilege.
+- Reconcile rejected optimistic edits.
 
 Low:
 
-- Remove unused assets.
-- Clean dependency placement.
-- Update README files to describe the whole project, not only individual slices.
+- Remove unused assets/components or wire them intentionally.
+- Address large bundle warning if load time matters for demo.
+- Move development-only dependencies.
 
 ## Architecture Review
 
-Server as source of truth: Partial. The server persists accepted deltas and returns document versions, but clients optimistically update without rollback/reconciliation on server rejection.
+Server as source of truth: Partial. The server persists accepted deltas and sends document versions, but clients optimistically mutate local state and do not recover automatically from rejected edits.
 
-Delta synchronization: Partial to complete for the isolated editor slice. Deltas are generated, transmitted, validated, applied, persisted, and broadcast. The missing join flow prevents normal end-to-end operation.
+Delta synchronization: Mostly complete. Deltas are generated, transmitted, validated, applied, persisted, and broadcast.
 
-Conflict strategy: Partial. The server applies arrival-order edits and shifts late positions based on recent deltas. This is explainable and tested, but limited for overlapping concurrent edits.
+Conflict strategy: Partial. Arrival-order plus position shifting is intentional and explainable, but it does not fully resolve overlapping concurrent edits.
 
-Separation of concerns: Partial. Delta and document services are cleanly separated, but room management, identity, and host authorization are missing.
+Separation of concerns: Partial. Delta and document persistence are separated well. Room management is basic, and socket handling has too many responsibilities in one module.
 
-Reusable modules: Partial. The implemented services are reusable; UI and socket lifecycle are minimal and not yet productized.
+Reusable modules: Partial. UI primitives and delta services are reusable. Presence, host privileges, and sessions are not yet modularized.
+
+Architecture compliance with SRS: Partial. The code follows the single-document, no-CRDT constraint and uses MERN plus Socket.IO, but required room ownership, host privilege, presence UI, deployment, and reconnection expectations are not fully met.
 
 ## Hackathon Score
 
-Overall score: 42/100
+Overall score: 64/100
 
-| Category               |  Score |
-| ---------------------- | -----: |
-| Innovation             | 45/100 |
-| Implementation         | 40/100 |
-| Code Quality           | 55/100 |
-| Architecture           | 45/100 |
-| Scalability            | 25/100 |
-| Presentation Readiness | 30/100 |
+| Category | Score |
+| --- | ---: |
+| Innovation | 60/100 |
+| Implementation | 66/100 |
+| Code Quality | 68/100 |
+| Architecture | 62/100 |
+| Scalability | 45/100 |
+| Presentation Readiness | 58/100 |
 
-The strongest part is the focused delta engine with unit tests. The weakest parts are missing product workflows, broken frontend/backend join contract, missing deployment evidence, and absent host privileges.
+The project has a viable core editing path and a defensible simple sync engine. It loses major points because required user-visible realtime features, host authorization, deployment evidence, and integration testing are incomplete.
 
 ## Verification Run
 
-Commands executed during audit:
+Commands executed:
 
 ```text
-server: npm.cmd test        # 10 tests passed
-client: npm.cmd test        # 5 tests passed
-client: npm.cmd run lint    # passed
-client: npm run build       # passed
+client: npm.cmd test       # 5 tests passed
+server: npm.cmd test       # 10 tests passed
+client: npm.cmd run lint   # passed
+client: npm.cmd run build  # passed with large chunk warning
 ```
 
-Initial `npm test` and `npm run lint` attempts through PowerShell failed because local script execution is disabled for `npm.ps1`; rerunning via `npm.cmd` succeeded.
+Unable to verify from repository:
+
+- Live deployment URL and production socket behavior.
+- MongoDB persistence across an actual server restart.
+- Multi-browser collaborative editing behavior.
+- Host privilege behavior from the UI.
+- Participant list and typing indicators in the UI.
+- Commit ownership by all three team members beyond visible local git history.
 
 ## Final Verdict
 
-Not hackathon-ready.
+Not fully hackathon-ready yet.
 
-The repository contains a promising and reasonably tested document/delta engine, but it does not yet satisfy the required CodeRoom product bar. The most serious issue is that the current frontend cannot join the current backend because the join payload is invalid. Even after that fix, room creation, host privileges, frontend participant/presence features, reconnect handling, and deployment evidence are still missing.
-
-Unable to verify from repository: live deployment, actual MongoDB runtime persistence across a real server restart, multi-client socket behavior in a browser, host privilege behavior, and commit ownership by all three team members beyond the visible local git log.
+The repository has moved from a narrow sync slice to a usable core product skeleton: create room, join room, username capture, socket sync, delta persistence, and initial document sync are present. To clear the hackathon bar confidently, the team should prioritize demonstrable host privileges, visible participants/presence, reconnect behavior, deployment, and integration tests.
