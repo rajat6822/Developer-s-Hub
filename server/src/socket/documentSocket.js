@@ -1,6 +1,13 @@
 const { applyAndPersistDelta, getRoomDocument } = require("../services/documentService");
 const participants = require("../store/participantStore");
 
+const reconnectStore = require("../store/reconnectStore");
+const typingTimers = require("../store/typingStore");
+const { addParticipant, removeParticipant, getParticipantList, } = require("../utils/participantHelper");
+const { isRoomMember, isValidDelta, } = require("../utils/socketValidation");
+
+
+
 function buildIncomingDelta(payload) {
   return {
     position: payload.position,
@@ -16,7 +23,6 @@ function registerDocumentSocket(io) {
 
     socket.on("join-document", async ({ roomId, username } = {}, acknowledge) => {
 
-      // Validation
       if (!roomId || !username) {
         acknowledge?.({
           ok: false,
@@ -25,7 +31,6 @@ function registerDocumentSocket(io) {
         return;
       }
 
-      // Check room exists BEFORE joining
       const roomDocument = await getRoomDocument(roomId);
 
       if (!roomDocument) {
@@ -38,29 +43,16 @@ function registerDocumentSocket(io) {
 
       socket.join(roomId);
 
-      // Initialize participant list
-      if (!participants[roomId]) {
-        participants[roomId] = [];
-      }
+      reconnectStore[socket.id] = {
+        roomId,
+        username,
+      };
 
-      // Prevent duplicate entries
-      const alreadyExists = participants[roomId].some(
-        (user) => user.socketId === socket.id
-      );
+      addParticipant(roomId, socket.id, username);
 
-      if (!alreadyExists) {
-        participants[roomId].push({
-          socketId: socket.id,
-          username,
-        });
-      }
-
-      // Broadcast participant list
       io.to(roomId).emit(
         "participant-list",
-        participants[roomId].map((user) => ({
-          username: user.username,
-        }))
+        getParticipantList(roomId)
       );
 
       acknowledge?.({
@@ -69,8 +61,8 @@ function registerDocumentSocket(io) {
         document: roomDocument.document,
         documentVersion: roomDocument.documentVersion,
       });
-    });
 
+    });
     socket.on("send-delta", async (payload = {}, acknowledge) => {
 
       const { roomId } = payload;
@@ -79,6 +71,26 @@ function registerDocumentSocket(io) {
         acknowledge?.({
           ok: false,
           reason: "roomId is required.",
+        });
+        return;
+      }
+
+      // NEW: Membership Validation
+      if (!isRoomMember(roomId, socket.id)) {
+        acknowledge?.({
+          ok: false,
+          reason: "User is not inside this room.",
+        });
+        return;
+      }
+
+      // NEW: Delta Validation
+      const delta = buildIncomingDelta(payload);
+
+      if (!isValidDelta(delta)) {
+        acknowledge?.({
+          ok: false,
+          reason: "Invalid delta.",
         });
         return;
       }
@@ -120,11 +132,31 @@ function registerDocumentSocket(io) {
         username,
       });
 
+      const key = `${roomId}-${username}`;
+
+      clearTimeout(typingTimers[key]);
+
+      typingTimers[key] = setTimeout(() => {
+
+        socket.to(roomId).emit("stopTyping", {
+          username,
+        });
+
+        delete typingTimers[key];
+
+      }, 2000);
+
     });
 
     socket.on("stopTyping", ({ roomId, username } = {}) => {
 
       if (!roomId || !username) return;
+
+      const key = `${roomId}-${username}`;
+
+      clearTimeout(typingTimers[key]);
+
+      delete typingTimers[key];
 
       socket.to(roomId).emit("stopTyping", {
         username,
@@ -134,38 +166,38 @@ function registerDocumentSocket(io) {
 
     socket.on("disconnect", () => {
 
-      for (const roomId in participants) {
+      const reconnect = reconnectStore[socket.id];
 
-        const index = participants[roomId].findIndex(
-          (user) => user.socketId === socket.id
-        );
+      if (!reconnect) return;
 
-        if (index !== -1) {
+      const { roomId, username } = reconnect;
 
-          const disconnectedUser = participants[roomId][index];
+      socket.to(roomId).emit("stopTyping", {
+        username,
+      });
 
-          socket.to(roomId).emit("stopTyping", {
-            username: disconnectedUser.username,
-          });
+      removeParticipant(roomId, socket.id);
 
-          participants[roomId].splice(index, 1);
+      io.to(roomId).emit(
+        "participant-list",
+        getParticipantList(roomId)
+      );
 
-          io.to(roomId).emit(
-            "participant-list",
-            participants[roomId].map((user) => ({
-              username: user.username,
-            }))
-          );
+      delete reconnectStore[socket.id];
 
-          if (participants[roomId].length === 0) {
-            delete participants[roomId];
-          }
-
-          break;
-        }
-      }
     });
 
+    socket.on("close-room", ({ roomId }) => {
+
+      io.to(roomId).emit("room-closed");
+
+    });
+
+    socket.on("kick-user", ({ roomId, socketId }) => {
+
+      io.to(socketId).emit("kicked");
+
+    });
   });
 }
 
